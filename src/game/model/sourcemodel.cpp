@@ -7,7 +7,7 @@
 #include <thirdparty/imgui/misc/imgui_utility.h>
 
 extern CBufferManager g_BufferManager;
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 static const char* const s_PathPrefixMDL = s_AssetTypePaths.find(AssetType_t::MDL)->second;
 static const char* const s_PathPrefixSEQ = s_AssetTypePaths.find(AssetType_t::SEQ)->second;
@@ -258,8 +258,8 @@ void ParseSourceModelTextureData(ModelParsedData_t* const parsedData)
         const uint64_t sknGUID = RTech::StringToGuid(skn.c_str());
         const uint64_t fixGUID = RTech::StringToGuid(fix.c_str());
 
-        CPakAsset* const sknAsset = g_assetData.FindAsset<CPakAsset>(skn);
-        CPakAsset* const fixAsset = g_assetData.FindAsset<CPakAsset>(fix);
+        CPakAsset* const sknAsset = g_assetData.FindAssetByGUID<CPakAsset>(sknGUID);
+        CPakAsset* const fixAsset = g_assetData.FindAssetByGUID<CPakAsset>(fixGUID);
 
         if (sknAsset)
         {
@@ -440,7 +440,7 @@ void LoadSourceModelAsset(CAssetContainer* container, CAsset* asset)
     srcMdlAsset->SetParsedData(parsedData);
     srcMdlAsset->SetLooseData(looseData);
 
-    srcMdlSource->SetFileName(GetStringAfterLastSlash(srcMdlAsset->GetName()));
+    srcMdlSource->SetFileName(keepAfterLastSlashOrBackslash(srcMdlAsset->GetName()));
 
     srcMdlAsset->FixupSkinData();
 }
@@ -496,12 +496,12 @@ bool ExportSourceModelAsset(CAsset* const asset, const int setting)
     assertm(srcMdlAsset, "Asset should be valid.");
 
     // Create exported path + asset path.
-    std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+    std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
     const std::filesystem::path modelPath(srcMdlAsset->GetAssetName());
     const std::string modelStem(modelPath.stem().string());
 
     // truncate paths?
-    if (g_rsxSettings.exportPathsFull)
+    if (g_ExportSettings.exportPathsFull)
     {
         exportPath.append(modelPath.parent_path().string());
     }
@@ -518,7 +518,7 @@ bool ExportSourceModelAsset(CAsset* const asset, const int setting)
     }
 
     // [rika]: handle sequence exporting
-    if (g_rsxSettings.exportRigSequences && srcMdlAsset->GetSequenceCount() > 0)
+    if (g_ExportSettings.exportRigSequences && srcMdlAsset->GetSequenceCount() > 0)
     {
         const uint32_t type = static_cast<uint32_t>(AssetType_t::SEQ);
 
@@ -690,13 +690,13 @@ bool ExportSourceSequenceAsset(CAsset* const asset, const int setting)
     }
 
     // Create exported path + asset path.
-    std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+    std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
     const std::filesystem::path seqPath(srcSeqAsset->GetAssetName());
     const std::string seqStem(seqPath.stem().string());
     const std::string srcStem(std::filesystem::path(srcSeqAsset->GetContainerFileName()).stem().string());
 
     // truncate paths?
-    if (g_rsxSettings.exportPathsFull)
+    if (g_ExportSettings.exportPathsFull)
     {
         exportPath.append(seqPath.parent_path().string());
     }

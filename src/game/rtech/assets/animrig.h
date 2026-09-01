@@ -113,17 +113,6 @@ public:
 			parsedData = ModelParsedData_t(reinterpret_cast<r5::studiohdr_v17_t*>(data), 0, studioDataSize);
 			break;
 		}
-		case eMDLVersion::VERSION_19_2:
-		case eMDLVersion::VERSION_19_3:
-		{
-			const r5::studiohdr_v19_2_t* const tmp = reinterpret_cast<const r5::studiohdr_v19_2_t* const>(data);
-			constexpr int dataPerBone = sizeof(int) + sizeof(short) + (sizeof(Vector) * 3) + (sizeof(Quaternion) * 2) + sizeof(matrix3x4_t);
-
-			const int studioDataSize = IALIGN16(FIX_OFFSET(tmp->linearboneindex) + sizeof(r5::mstudiolinearbone_v19_t) + (dataPerBone * tmp->boneCount));
-
-			parsedData = ModelParsedData_t(reinterpret_cast<r5::studiohdr_v19_2_t*>(data), 0, studioDataSize);
-			break;
-		}
 		}
 	}
 

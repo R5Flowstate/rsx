@@ -2,7 +2,7 @@
 #include <game/rtech/assets/shaderset.h>
 #include <thirdparty/imgui/imgui.h>
 
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 void LoadShaderSetAsset(CAssetContainer* const pak, CAsset* const asset)
 {
@@ -52,14 +52,6 @@ void LoadShaderSetAsset(CAssetContainer* const pak, CAsset* const asset)
 		assertm(pakAsset->data()->headerStructSize == sizeof(ShaderSetAssetHeader_v14_t), "incorrect header");
 
 		ShaderSetAssetHeader_v14_t* hdr = reinterpret_cast<ShaderSetAssetHeader_v14_t*>(pakAsset->header());
-		shdsAsset = new ShaderSetAsset(hdr);
-		break;
-	}
-	case 15:
-	{
-		assertm(pakAsset->data()->headerStructSize == sizeof(ShaderSetAssetHeader_v15_t), "incorrect header");
-
-		ShaderSetAssetHeader_v15_t* hdr = reinterpret_cast<ShaderSetAssetHeader_v15_t*>(pakAsset->header());
 		shdsAsset = new ShaderSetAsset(hdr);
 		break;
 	}
@@ -205,7 +197,7 @@ bool ExportShaderSetAsset(CAsset* const asset, const int setting)
 
 	// not currently used
 	// Create exported path + asset path.
-	std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+	std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
 	std::filesystem::path dirPath = exportPath;
 
 	dirPath.append(s_PathPrefixSHDR);

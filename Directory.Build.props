@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Use custom static triplet with /MD runtime (no DLL dependency) -->
+    <VcpkgTriplet>x64-windows-static-md</VcpkgTriplet>
+  </PropertyGroup>
+</Project>

@@ -258,7 +258,7 @@ bool ExportDatatableAsset(CAsset* const asset, const int setting)
 
     const DatatableAsset* const dtblAsset = pakAsset->extraData<const DatatableAsset* const>();
 
-    std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+    std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
     std::filesystem::path stgsPath = asset->GetAssetName();
 
     exportPath.append(stgsPath.parent_path().string());

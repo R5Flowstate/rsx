@@ -55,7 +55,7 @@ struct AnimRecordingAssetHeader_v0_t
 	int numRecordedOverlays; // count for recordedOverlays
 
 	int runtimeSlotIndex;
-	int slotIndexSign; // -1 if runtimeSlotIndex is negative, does idx >> 31 in code at [r5apex_ds + 0xCBDC60].
+	int slotIndexSign; // -1 if runtimeSlotIndex is negative (idx >> 31).
 
 	int animRecordingId;
 

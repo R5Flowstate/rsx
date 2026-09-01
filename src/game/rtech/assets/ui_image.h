@@ -48,15 +48,11 @@ static_assert(sizeof(UIImageTile_t) == sizeof(uint32_t));
 
 struct UIImageAssetData_v2_t
 {
-	// No clue what this float data is, UVS?
-	float unk_00;
-	float unk_04;
-	float unk_08;
-	float unk_0C;
-	float unk_10;
-	float unk_14;
-	float unk_18;
-	float unk_1C;
+	// When borderId == -2 (PENDING): border fractions for 9-slice rendering
+	// [0..3] = borderFracs_ltrb (left, top, right, bottom)
+	// [4..5] = rcpTotalPixels (1/width, 1/height)
+	// [6..7] = minSlope
+	float borderFloats[8];
 
 	uint16_t highResWidth;
 	uint16_t highResHeight;
@@ -82,16 +78,16 @@ struct UIImageAssetHeader_v2_t
 
 	UIImageAssetFlags_t imgFlags;
 
-	uint8_t unk_14;
-	uint8_t unk_15;
-	uint16_t unk_16;
+	uint8_t streamState;
+	uint8_t _pad15;
+	int16_t borderId;  // -1 = no border, -2 = border data in CPU floats
 
 	uint16_t width;
 	uint16_t height;
 
 	uint32_t unk_1C;
 
-	float unknownFloats[8]; // UVS?
+	float unknownFloats[8]; // UIMG offset data: [0]=cropInsetLeft [1]=cropInsetTop [2]=endAnchorX [3]=endAnchorY [4]=startAnchorX [5]=startAnchorY [6]=scaleRatioX [7]=scaleRatioY
 };
 static_assert(sizeof(UIImageAssetHeader_v2_t) == 0x40);
 

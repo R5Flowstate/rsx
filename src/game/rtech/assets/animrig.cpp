@@ -6,11 +6,13 @@
 #include <core/mdl/stringtable.h>
 #include <core/mdl/rmax.h>
 #include <core/mdl/cast.h>
+#include <core/mdl/anim_qc.h>
+#include <core/mdl/modeldata.h>
 
 #include <thirdparty/imgui/imgui.h>
 #include <thirdparty/imgui/misc/imgui_utility.h>
 
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 void LoadAnimRigAsset(CAssetContainer* const container, CAsset* const asset)
 {
@@ -35,18 +37,9 @@ void LoadAnimRigAsset(CAssetContainer* const container, CAsset* const asset)
     case 7:
     {
         CPakFile* const pak = static_cast<CPakFile* const>(container);
-        eMDLVersion ver = pak->header()->createdTime >= s_AnimSeqTimeStamp_V12_1 ? eMDLVersion::VERSION_19_1 : eMDLVersion::VERSION_19;
+        const eMDLVersion ver = pak->header()->createdTime >= s_AnimSeqTimeStamp_V12_1 ? eMDLVersion::VERSION_19_1 : eMDLVersion::VERSION_19;
 
         AnimRigAssetHeader_v5_t* const hdr = reinterpret_cast<AnimRigAssetHeader_v5_t*>(pakAsset->header());
-
-        // [rika]: model version unchanged reasonably, but animdata has changed so.
-        if (pak->header()->createdTime > s_AnimSeqTimeStamp_V13)
-            ver = eMDLVersion::VERSION_19_3;
-
-        // i HAAAAATE this tool man
-        if (pak->header()->createdTime > s_AnimRigTimeStamp_V7_V19_2)
-            ver = eMDLVersion::VERSION_19_2;
-
         arigAsset = new AnimRigAsset(hdr, ver);
         break;
     }
@@ -116,8 +109,6 @@ void LoadAnimRigAsset(CAssetContainer* const container, CAsset* const asset)
         break;
     }
     case eMDLVersion::VERSION_19_1:
-    case eMDLVersion::VERSION_19_2:
-    case eMDLVersion::VERSION_19_3:
     {
         ParseModelBoneData_v19(arigAsset->GetParsedData());
         ParseModelAttachmentData_v16(arigAsset->GetParsedData());
@@ -167,10 +158,9 @@ void PostLoadAnimRigAsset(CAssetContainer* const pak, CAsset* const asset)
             CPakAsset* const animSeqAsset = g_assetData.FindAssetByGUID<CPakAsset>(guid);
 
             if (nullptr == animSeqAsset)
+            {
                 continue;
-
-            if (!animSeqAsset->hasExtraData())
-                continue;
+            }
 
             AnimSeqAsset* const animSeq = reinterpret_cast<AnimSeqAsset* const>(animSeqAsset->extraData());
 
@@ -231,15 +221,8 @@ void PostLoadAnimRigAsset(CAssetContainer* const pak, CAsset* const asset)
         break;
     }
     case eMDLVersion::VERSION_19_1:
-    case eMDLVersion::VERSION_19_2:
     {
-        ParseModelSequenceData_Stall_V19_1(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data), ANIM_BONEFLAG_BITS_4);
-
-        break;
-    }
-    case eMDLVersion::VERSION_19_3:
-    {
-        ParseModelSequenceData_Stall_V19_1(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data), ANIM_BONEFLAG_BITS_6);
+        ParseModelSequenceData_Stall_V19_1(arigAsset->GetParsedData(), reinterpret_cast<char* const>(arigAsset->data));
 
         break;
     }
@@ -282,12 +265,12 @@ bool ExportAnimRigAsset(CAsset* const asset, const int setting)
     assertm(animRigAsset->name, "No name for anim rig.");
 
     // Create exported path + asset path.
-    std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+    std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
     const std::filesystem::path rigPath(animRigAsset->name);
     const std::string rigStem(rigPath.stem().string());
 
     // truncate paths?
-    if (g_rsxSettings.exportPathsFull)
+    if (g_ExportSettings.exportPathsFull)
         exportPath.append(rigPath.parent_path().string());
     else
         exportPath.append(std::format("{}/{}", s_PathPrefixARIG, rigStem));
@@ -300,13 +283,17 @@ bool ExportAnimRigAsset(CAsset* const asset, const int setting)
 
     const ModelParsedData_t* const parsedData = &animRigAsset->parsedData;
 
-    if (g_rsxSettings.exportRigSequences && animRigAsset->numAnimSeqs > 0)
+    // Only export sequences when SMD format is selected
+    const bool bExportSequences = (setting == eAnimRigExportSetting::ANIMRIG_SMD);
+
+    if (bExportSequences && animRigAsset->numAnimSeqs > 0)
     {
-        if (!ExportAnimSeqFromAsset(exportPath, rigStem, animRigAsset->name, animRigAsset->numAnimSeqs, animRigAsset->animSeqs, animRigAsset->GetRig()))
+        // Force SMD format for animations when exporting rig as SMD
+        if (!ExportAnimSeqFromAsset(exportPath, rigStem, animRigAsset->name, animRigAsset->numAnimSeqs, animRigAsset->animSeqs, animRigAsset->GetRig(), eAnimSeqExportSetting::ANIMSEQ_SMD))
             return false;
     }
 
-    if (g_rsxSettings.exportRigSequences && parsedData->NumLocalSeq() > 0)
+    if (bExportSequences && parsedData->NumLocalSeq() > 0)
     {
         std::filesystem::path outputPath(exportPath);
         outputPath.append(std::format("anims_{}/temp", rigStem));
@@ -317,16 +304,14 @@ bool ExportAnimRigAsset(CAsset* const asset, const int setting)
             return false;
         }
 
-        auto aseqAssetBinding = g_assetData.m_assetTypeBindings.find('qesa');
-        assertm(aseqAssetBinding != g_assetData.m_assetTypeBindings.end(), "Unable to find asset type binding for \"aseq\" assets");
-
         for (int i = 0; i < parsedData->NumLocalSeq(); i++)
         {
             const ModelSeq_t* const seqdesc = parsedData->LocalSeq(i);
 
             outputPath.replace_filename(seqdesc->szlabel);
 
-            ExportSeqDesc(aseqAssetBinding->second.e.exportSetting, seqdesc, outputPath, animRigAsset->name, animRigAsset->GetRig(), RTech::StringToGuid(seqdesc->szlabel));
+            // Force SMD format for local sequences when exporting rig as SMD
+            ExportSeqDesc(eAnimSeqExportSetting::ANIMSEQ_SMD, seqdesc, outputPath, animRigAsset->name, animRigAsset->GetRig(), RTech::StringToGuid(seqdesc->szlabel));
         }
     }
 
@@ -350,7 +335,8 @@ bool ExportAnimRigAsset(CAsset* const asset, const int setting)
     }
     case eAnimRigExportSetting::ANIMRIG_SMD:
     {
-        return ExportModelSMD(parsedData, exportPath) && ExportModelQC(parsedData, exportPath, setting, 54);
+        // Export SMD and QC together
+        return ExportModelSMD(parsedData, exportPath) && ExportAnimRigQC(animRigAsset, exportPath);
     }
     default:
     {
@@ -372,7 +358,8 @@ void InitAnimRigAssetType()
         .loadFunc = LoadAnimRigAsset,
         .postLoadFunc = PostLoadAnimRigAsset,
         .previewFunc = nullptr,
-        .e = { ExportAnimRigAsset, 0, s_AnimRigExportSettingNames, ARRSIZE(s_AnimRigExportSettingNames) },
+        // default to ANIMRIG_RRIG (2) so anim rigs export as raw re-packable .rrig + .rson.
+        .e = { ExportAnimRigAsset, 2, s_AnimRigExportSettingNames, ARRSIZE(s_AnimRigExportSettingNames) },
     };
 
     REGISTER_TYPE(type);

@@ -20,21 +20,6 @@ struct VertexWeight_t
 	int16_t bone;
 };
 
-struct VertexWeight_ForShader_t
-{
-	float weight;
-	int bone;
-
-	void operator=(VertexWeight_t& rhs)
-	{
-		weight = rhs.weight;
-		bone = rhs.bone;
-	}
-};
-
-#define VERT_PARSE_EXTRAWEIGHT	0x1
-#define VERT_PARSE_BONES_1024	0x2
-
 struct Vertex_t
 {
 	Vector position;
@@ -46,13 +31,7 @@ struct Vertex_t
 	uint32_t weightCount : 8;
 	uint32_t weightIndex : 24; // max weight count in a mesh is 1048576 (2^20), 24 bits gives plenty of headroom with a max value of 16777216 (2^24)
 
-	uint64_t blendData; // opaque yippee!!!!! i fucking hate working on RSX
-
-	Vertex_t(float x, float y, float z) : position(x, y, z), normalPacked(0), color(0xFF, 0xFF, 0xFF, 0xFF), texcoord(INFINITY, INFINITY), weightCount(0), weightIndex(0), blendData(0) {};
-
-	static void ParseWeightFromVG_256(Vertex_t* const vert, VertexWeight_t* const weights, const char* const rawVertexData, const void* const boneMap, const vvw::mstudioboneweightextra_t* const weightExtra, const uint8_t parseFlags, int& weightIdx, int& offset);
-	static void ParseWeightFromVG_1024(Vertex_t* const vert, VertexWeight_t* const weights, const char* const rawVertexData, const void* const boneMap, const vvw::mstudioboneweightextra_t* const weightExtra, const uint8_t parseFlags, int& weightIdx, int& offset);
-	static bool ParseVertexFromVG(Vertex_t* const vert, VertexWeight_t* const weights, Vector2D* const texcoords, ModelMeshData_t* const mesh, const char* const rawVertexData, const void* const boneMap, const vvw::mstudioboneweightextra_t* const weightExtra, const uint8_t parseFlags, int& weightIdx);
+	static void ParseVertexFromVG(Vertex_t* const vert, VertexWeight_t* const weights, Vector2D* const texcoords, ModelMeshData_t* const mesh, const char* const rawVertexData, const uint8_t* const boneMap, const vvw::mstudioboneweightextra_t* const weightExtra, int& weightIdx);
 
 	// Generic (basic data shared between them)
 	static void ParseVertexFromVTX(Vertex_t* const vert, Vector2D* const texcoords, ModelMeshData_t* const mesh, const vvd::mstudiovertex_t* const pVerts, const Vector4D* const pTangs, const Color32* const pColors, const Vector2D* const pUVs, const int origId);
@@ -90,27 +69,21 @@ struct Vertex_t
 		return out;
 	}
 };
-static_assert(offsetof(Vertex_t, blendData) == 32);
 
 //
 // PARSEDDATA
 //
 struct ModelMeshData_t
 {
-	ModelMeshData_t() : meshVertexDataIndex(invalidNoodleIdx), rawVertexData(nullptr), rawVertexLayoutFlags(0ull), indexCount(0), vertCount(0), vertCacheSize(0), weightsPerVert(0), weightsCount(0), texcoordCount(0), texcoodIndices(0), materialId(0), materialAsset(nullptr), bodyPartIndex(-1), extraBoneWeights(nullptr), extraBoneWeightsSize(0) {};
+	ModelMeshData_t() : meshVertexDataIndex(invalidNoodleIdx), rawVertexData(nullptr), rawVertexLayoutFlags(0ull), indexCount(0), vertCount(0), vertCacheSize(0), weightsPerVert(0), weightsCount(0), texcoordCount(0), texcoodIndices(0), materialId(0), materialAsset(nullptr), bodyPartIndex(-1) {};
 	ModelMeshData_t(const ModelMeshData_t& mesh) : meshVertexDataIndex(mesh.meshVertexDataIndex), rawVertexData(mesh.rawVertexData), rawVertexLayoutFlags(mesh.rawVertexLayoutFlags), indexCount(mesh.indexCount), vertCount(mesh.vertCount), vertCacheSize(mesh.vertCacheSize),
-		weightsPerVert(mesh.weightsPerVert), weightsCount(mesh.weightsCount), texcoordCount(mesh.texcoordCount), texcoodIndices(mesh.texcoodIndices), materialId(mesh.materialId), materialAsset(mesh.materialAsset), bodyPartIndex(mesh.bodyPartIndex), extraBoneWeights(nullptr), extraBoneWeightsSize(0) {
+		weightsPerVert(mesh.weightsPerVert), weightsCount(mesh.weightsCount), texcoordCount(mesh.texcoordCount), texcoodIndices(mesh.texcoodIndices), materialId(mesh.materialId), materialAsset(mesh.materialAsset), bodyPartIndex(mesh.bodyPartIndex) {
 	};
 	ModelMeshData_t(ModelMeshData_t& mesh) : meshVertexDataIndex(mesh.meshVertexDataIndex), rawVertexData(mesh.rawVertexData), rawVertexLayoutFlags(mesh.rawVertexLayoutFlags), indexCount(mesh.indexCount), vertCount(mesh.vertCount), vertCacheSize(mesh.vertCacheSize),
-		weightsPerVert(mesh.weightsPerVert), weightsCount(mesh.weightsCount), texcoordCount(mesh.texcoordCount), texcoodIndices(mesh.texcoodIndices), materialId(mesh.materialId), materialAsset(mesh.materialAsset), bodyPartIndex(mesh.bodyPartIndex), extraBoneWeights(nullptr), extraBoneWeightsSize(0) {
+		weightsPerVert(mesh.weightsPerVert), weightsCount(mesh.weightsCount), texcoordCount(mesh.texcoordCount), texcoodIndices(mesh.texcoodIndices), materialId(mesh.materialId), materialAsset(mesh.materialAsset), bodyPartIndex(mesh.bodyPartIndex) {
 	};
 
-	~ModelMeshData_t()
-	{
-		// [rexx]: dw i'm uninstalling visual studio right now
-		if (extraBoneWeights && extraBoneWeights != (char*)(0xcdcdcdcdcdcdcdcd))
-			delete[] extraBoneWeights;
-	};
+	~ModelMeshData_t() {}
 
 	size_t meshVertexDataIndex;
 
@@ -131,9 +104,6 @@ struct ModelMeshData_t
 	// [rika]: swapped this to CPakAsset because in many cases the parsed asset would not exist yet
 	int materialId; // the index of this material
 	CPakAsset* materialAsset; // pointer to the material's asset (if loaded)
-
-	char* extraBoneWeights;
-	int64_t extraBoneWeightsSize;
 
 	int bodyPartIndex;
 
@@ -404,6 +374,22 @@ struct ModelBodyPart_t
 	FORCEINLINE bool IsPreviewEnabled() const { return previewEnabled; };
 };
 
+struct ModelAnimSequence_t
+{
+	enum class eType : uint8_t
+	{
+		UNLOADED = 0,
+		DIRECT,
+		RIG,
+	};
+
+	CPakAsset* asset;
+	uint64_t guid;
+	eType type;
+
+	FORCEINLINE const bool IsLoaded() const { return type != eType::UNLOADED; };
+};
+
 struct ModelPoseParam_t
 {
 	ModelPoseParam_t() : name(nullptr), flags(0), start(0.0f), end(0.0f), loop(0.0f) {}
@@ -523,10 +509,6 @@ public:
 		localNodeNames(nullptr), numLocalNodes(0), poseparams(nullptr), ikchains(nullptr), iklocks(nullptr), studiohdr(hdr, dataSizePhys, dataSizeModel) {};
 	ModelParsedData_t(r5::studiohdr_v17_t* const hdr, const int dataSizePhys, const int dataSizeModel) : localSequences(nullptr), numLocalSequences(0), externalSequences(nullptr), numExternalSequences(0), externalIncludeModels(nullptr), numExternalIncludeModels(0),
 		localNodeNames(nullptr), numLocalNodes(0), poseparams(nullptr), ikchains(nullptr), iklocks(nullptr), studiohdr(hdr, dataSizePhys, dataSizeModel) {};
-	ModelParsedData_t(r5::studiohdr_v19_2_t* const hdr, const int dataSizePhys, const int dataSizeModel) : localSequences(nullptr), numLocalSequences(0), externalSequences(nullptr), numExternalSequences(0), externalIncludeModels(nullptr), numExternalIncludeModels(0),
-		localNodeNames(nullptr), numLocalNodes(0), poseparams(nullptr), ikchains(nullptr), iklocks(nullptr), studiohdr(hdr, dataSizePhys, dataSizeModel) {
-	};
-
 
 	~ModelParsedData_t()
 	{
@@ -592,6 +574,9 @@ public:
 
 	std::vector<ModelBodyPart_t> bodyParts;
 
+	// Resolved vector of animation sequences for use in model preview
+	// [rika]: unused, not quite sure why this was added
+	//std::vector<ModelAnimSequence_t> animSequences;
 	ModelSeq_t* localSequences;
 	int numLocalSequences;
 	int numExternalSequences;
@@ -655,7 +640,7 @@ void ParseModelAttachmentData_v16(ModelParsedData_t* const parsedData);
 void ParseModelHitboxData_v8(ModelParsedData_t* const parsedData);
 void ParseModelHitboxData_v16(ModelParsedData_t* const parsedData);
 
-void CreateBuffersForModelDrawData(ModelParsedData_t* const parsedData, CDXDrawData* const drawData, const uint64_t lod);
+void ParseModelDrawData(ModelParsedData_t* const parsedData, CDXDrawData* const drawData, const uint64_t lod);
 
 void ParseModelAnimTypes_V8(ModelParsedData_t* const parsedData);
 void ParseModelAnimTypes_V16(ModelParsedData_t* const parsedData);
@@ -682,14 +667,12 @@ public:
 	inline VertexWeight_t* const GetWeights() const { return weightOffset > 0 ? reinterpret_cast<VertexWeight_t*>((char*)this + weightOffset) : nullptr; };
 	inline Vector2D* const GetTexcoords() const { return texcoordOffset > 0 ? reinterpret_cast<Vector2D*>((char*)this + texcoordOffset) : nullptr; };
 
-	inline int64_t GetWeightCount() const { return weightCount; };
 	inline const int64_t GetSize() const { return size; };
 
 private:
 	int64_t indiceOffset;
 	int64_t vertexOffset;
 	int64_t weightOffset;
-	int64_t weightCount;
 	int64_t texcoordOffset;
 
 	int64_t size; // size of this data
@@ -797,8 +780,6 @@ enum eModelExportSetting : int
 	// rmdl only for now, but can support sourcemodelasset in the future
 	MODEL_STL_VALVE_PHYSICS,
 	MODEL_STL_RESPAWN_PHYSICS,
-	
-	MODEL_HITBOXES,
 
 	MODEL_COUNT,
 };
@@ -810,8 +791,7 @@ static const char* s_ModelExportSettingNames[] =
 	"RMDL",
 	"SMD",
 	"STL (Valve Physics)", 
-	"STL (Respawn Physics)",
-	"OBJ (Hitboxes only)"
+	"STL (Respawn Physics)"
 };
 
 static const char* s_ModelExportExtensions[] =
@@ -866,51 +846,15 @@ bool ExportModelQC(const ModelParsedData_t* const parsedData, std::filesystem::p
 bool ExportSeqDesc(const int setting, const ModelSeq_t* const seqdesc, std::filesystem::path& exportPath, const char* const skelName, const std::vector<ModelBone_t>* const bones, const uint64_t guid);
 bool ExportSeqQC(const ModelParsedData_t* const parsedData, const ModelSeq_t* const sequence, std::filesystem::path& exportPath, const int setting, const int version);
 
-void UpdateModelBoneMatrix(CDXDrawData* const drawData);
+// Forward declarations for anim assets
+class AnimRigAsset;
+
+// Consolidated QC export for animrig and animseq
+bool ExportAnimRigQC(const AnimRigAsset* const animRigAsset, std::filesystem::path& exportPath);
+bool ExportAnimSeqsQC(const std::vector<std::filesystem::path>& rseqPaths, const std::filesystem::path& rrigPath, std::filesystem::path& exportPath);
+
+void UpdateModelBoneMatrix(CDXDrawData* const drawData, const ModelParsedData_t* const parsedData);
 void InitModelBoneMatrix(CDXDrawData* const drawData, const ModelParsedData_t* const parsedData);
-
-enum class PreviewSeqType_e : uint8_t
-{
-	SEQ_LOCAL, // stored directly inside the rmdl
-	SEQ_ASEQ,  // rmdl -> aseq
-	SEQ_ARIG,   // rmdl -> arig -> aseq
-};
-
-struct SeqPreviewEntry_t
-{
-	std::string name;
-	uint64_t guid; // local seqs do not have a guid so this is zero
-
-	const ModelSeq_t* seqdesc;
-	const std::vector<ModelBone_t>* srcBones; // the skeleton that belongs to this sequence's parent (i.e., model or rig)
-
-	PreviewSeqType_e type;
-
-	bool parsed; // if this is from an external sequence then this is true if the asset was loaded (i.e., not in a diff pak)
-				 // local sequences are always considered parsed
-};
-
-struct AnimState_t
-{
-	int selectedSeqIndex; // seqdesc
-	int selectedAnimIndex; // animdesc
-
-	int activeSeqIdx;
-	int activeAnimIdx;
-
-	float frame;
-
-	std::unique_ptr<char[]> dcmpNoodle; // noodle decomp
-	std::vector<int> boneRemap; // model bone index -> index into the seq's source skeleton (and its anim data), -1 if the bone isn't in it
-
-	bool playing;
-	bool looping;
-
-	void TogglePlay() { playing = !playing; };
-	void Play() { playing = true; };
-	void Stop() { playing = false; frame = 0.f; };
-	void Restart() { Play();  frame = 0.f; };
-};
 
 struct ModelPreviewInfo_t
 {
@@ -930,13 +874,7 @@ struct ModelPreviewInfo_t
 	uint8_t selectedLODLevel = 0u;
 	uint8_t minLODIndex = 0u;
 	uint8_t maxLODIndex = 0u;
-
-	std::vector<SeqPreviewEntry_t> sequences;
-	AnimState_t animState;
 };
 
 void* PreviewParsedData(ModelPreviewInfo_t* const info, ModelParsedData_t* const parsedData, char* const assetName, const uint64_t assetGUID, const bool firstFrameForAsset);
 void PreviewSeqDesc(const ModelSeq_t* const seqdesc);
-
-// returns true if the user requested a refresh of the sequence list
-bool Preview_SequencesSection(ModelPreviewInfo_t* const info, const ModelParsedData_t* const parsedData, CDXDrawData* const drawData);

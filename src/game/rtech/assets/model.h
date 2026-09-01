@@ -8,11 +8,6 @@
 
 class CDXDrawData;
 
-enum RSXSettings_RMDL_e
-{
-	SET_EXPORT_SEQUENCES = 0,
-};
-
 // pak data
 struct ModelAssetHeader_v8_t
 {
@@ -186,8 +181,6 @@ enum class eMDLVersion : int
 	VERSION_18,
 	VERSION_19,
 	VERSION_19_1,
-	VERSION_19_2,
-	VERSION_19_3,
 
 	// bleh
 	VERSION_52,
@@ -211,7 +204,6 @@ static const std::map<int, eMDLVersion> s_mdlVersionMap
 };
 
 constexpr uint64_t s_MdlTimeStamp_V19_1 = 0x01DC1DF805C28000; // 09/05/2025 00:00:00
-constexpr uint64_t s_MdlTimeStamp_V19_3 = 0x01DD1EED32D6C000; // 07/29/2026 00:00:00
 
 inline const eMDLVersion GetModelVersionFromAsset(CPakAsset* const asset, CPakFile* const pak)
 {
@@ -281,13 +273,6 @@ inline const eMDLVersion GetModelVersionFromAsset(CPakAsset* const asset, CPakFi
 	}
 	case eMDLVersion::VERSION_19:
 	{
-		if (pak->header()->createdTime >= s_MdlTimeStamp_V19_3)
-			return eMDLVersion::VERSION_19_3;
-
-		const r5::studiohdr_v19_2_t* const pHdr = reinterpret_cast<const r5::studiohdr_v19_2_t* const>(pMDL);
-		if (pHdr->sourceFilenameOffset == sizeof(r5::studiohdr_v19_2_t))
-			return eMDLVersion::VERSION_19_2;
-
 		if (pak->header()->createdTime >= s_MdlTimeStamp_V19_1)
 			return eMDLVersion::VERSION_19_1;
 
@@ -329,9 +314,6 @@ inline const eMDLVersion GetModelPakVersion(const int* const pHdr)
 	// v18
 	if (pHdrNew[100] == sizeof(r5::studiohdr_v17_t) || pHdrNew[59] == sizeof(r5::studiohdr_v17_t))
 		return eMDLVersion::VERSION_17;
-
-	if (pHdrNew[54] == sizeof(r5::studiohdr_v19_2_t))
-		return eMDLVersion::VERSION_19_2;
 
 	return eMDLVersion::VERSION_UNK;
 }
@@ -419,12 +401,6 @@ public:
 			parsedData = ModelParsedData_t(reinterpret_cast<r5::studiohdr_v17_t*>(data), cpu->dataSizePhys, cpu->dataSizeModel);
 			break;
 		}
-		case eMDLVersion::VERSION_19_2:
-		case eMDLVersion::VERSION_19_3:
-		{
-			parsedData = ModelParsedData_t(reinterpret_cast<r5::studiohdr_v19_2_t*>(data), cpu->dataSizePhys, cpu->dataSizeModel);
-			break;
-		}
 		}
 	};
 
@@ -457,7 +433,6 @@ public:
 	inline const studiohdr_generic_t& StudioHdr() const { return parsedData.studiohdr; }
 	inline const studiohdr_generic_t* const pStudioHdr() const { return &parsedData.studiohdr; }
 	inline ModelParsedData_t* const GetParsedData() { return &parsedData; }
-	inline const ModelParsedData_t* const GetParsedData() const { return &parsedData; }
 	inline const std::vector<ModelBone_t>* const GetRig() const { return &parsedData.bones; } // slerp them bones
 
 	// get loose files from vertDataPermanent

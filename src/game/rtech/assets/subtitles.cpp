@@ -3,7 +3,7 @@
 
 #include <thirdparty/imgui/imgui.h>
 
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 void LoadSubtitlesAsset(CAssetContainer* const pak, CAsset* const asset)
 {
@@ -219,11 +219,11 @@ bool ExportSubtitlesAsset(CAsset* const asset, const int setting)
     const SubtitlesAsset* const subtitlesAsset = pakAsset->extraData<const SubtitlesAsset* const>();
 
     // Create exported path + asset path.
-	std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+	std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
     const std::filesystem::path subtitlesPath(pakAsset->GetAssetName());
 
     // truncate paths?
-    if (g_rsxSettings.exportPathsFull)
+    if (g_ExportSettings.exportPathsFull)
         exportPath.append(subtitlesPath.parent_path().string());
     else
         exportPath.append(s_PathPrefixUI);

@@ -69,9 +69,6 @@ struct DXMeshDrawData_t
     ID3D11Buffer* vertexBuffer;
     ID3D11Buffer* indexBuffer;
 
-    ID3D11Buffer* weightsBuffer;
-    ID3D11ShaderResourceView* weightsSRV;
-
     ID3D11Buffer* uberStaticBuf;
     ID3D11Buffer* uberDynamicBuf;
 
@@ -80,6 +77,7 @@ struct DXMeshDrawData_t
 
     ID3D11InputLayout* inputLayout;
 
+    //std::shared_ptr<CTexture> albedoTexture;
     std::vector<DXDrawDataTexture_t> textures;
 
     size_t numIndices;
@@ -91,40 +89,9 @@ struct DXMeshDrawData_t
     Vector modelMins;
     Vector modelMaxs;
 
-    bool visible : 1;
-    bool doFrustumCulling : 1;
-    bool hasGameShaders : 1;
-    bool wireframe : 1;
-};
-
-// Mesh draw data for ""debug draw"" primitives
-struct DXMeshDrawData_DebugPrim_t
-{
-    DXMeshDrawData_DebugPrim_t(ID3D11Buffer* vertexBuf, ID3D11Buffer* indexBuf, DXGI_FORMAT indexFmt, D3D_PRIMITIVE_TOPOLOGY topo, UINT numIndices,UINT numVertices, float lifetime, bool isVisible, bool isWireframe, bool isIndexed, bool noDepthTest) :
-        vertexBuffer(vertexBuf), indexBuffer(indexBuf),
-        indexFormat(indexFmt), primTopology(topo),
-        numIndices(numIndices), numVertices(numVertices),
-        lifeRemaining(lifetime), visible(isVisible),
-        wireframe(isWireframe), indexed(isIndexed),
-        noDepthTest(noDepthTest)
-    {};
-
-    DXMeshDrawData_DebugPrim_t() = default;
-
-    ID3D11Buffer* vertexBuffer;
-    ID3D11Buffer* indexBuffer;
-
-    DXGI_FORMAT indexFormat;
-    D3D_PRIMITIVE_TOPOLOGY primTopology;
-
-    UINT numIndices;
-    UINT numVertices;
-    float lifeRemaining;
-
-    bool visible : 1;
-    bool wireframe : 1;
-    bool indexed : 1;
-    bool noDepthTest : 1;
+    bool visible;
+    bool doFrustumCulling;
+    bool hasGameShaders;
 };
 
 struct VS_TransformConstants
@@ -243,27 +210,10 @@ struct CBufModelInstance
 };
 static_assert(sizeof(CBufModelInstance) == 208);
 
-struct DXBone_t
-{
-    const char* name;
-    Vector pos;
-    Quaternion quat;
-    Vector scale;
-
-    int parent;
-};
-
 class CDXDrawData
 {
 public:
-
-    enum DrawDataType_e
-    {
-        MODEL,
-        TEXTURE,
-    };
-
-    CDXDrawData() : bones() {};
+    CDXDrawData() = default;
 
     ~CDXDrawData()
     {
@@ -275,24 +225,16 @@ public:
         {
             DX_RELEASE_PTR(meshBuffer.vertexBuffer);
             DX_RELEASE_PTR(meshBuffer.indexBuffer);
-            DX_RELEASE_PTR(meshBuffer.weightsBuffer);
         }
     }
 
     std::vector<DXMeshDrawData_t> meshBuffers;
-    std::vector<DXMeshDrawData_DebugPrim_t> debugPrims;
-
-    std::vector<DXBone_t> bones;
-    std::vector<XMMATRIX> boneInverseBindMatrices;
-
 
     ID3D11Buffer* transformsBuffer;
     ID3D11Buffer* modelInstanceBuffer;
 
     ID3D11Buffer* boneMatrixBuffer;
     ID3D11ShaderResourceView* boneMatrixSRV;
-
-    std::shared_ptr<CTexture> previewTexture;
 
     ID3D11InputLayout* inputLayout;
 
@@ -306,34 +248,29 @@ public:
 
     Vector position;
 
-    DrawDataType_e dataType;
-
     void SetPSResource(uint8_t bindPoint, ID3D11ShaderResourceView* srv)
     {
-        pixelShaderResources[bindPoint] = srv;
+        if (!pixelShaderResources.contains(bindPoint))
+            pixelShaderResources[bindPoint] = srv;
     };
 
     void SetVSResource(uint8_t bindPoint, ID3D11ShaderResourceView* srv)
     {
-        vertexShaderResources[bindPoint] = srv;
+        if (!vertexShaderResources.contains(bindPoint))
+            vertexShaderResources[bindPoint] = srv;
     };
-
-    void DrawLine(const Vector& start, const Vector& end, uint32_t col, bool noDepthTest = false, float width = 1.f, float duration = 0.f);
 };
-
-#define CAMERA_DEFAULT_DISTANCE 25.f
 
 class CDXCamera
 {
 public:
-    CDXCamera() : distanceToPivot(CAMERA_DEFAULT_DISTANCE) {};
+    CDXCamera() = default;
 
     void Move(float dt);
 
     void AddRotation(float yaw, float pitch, float roll);
 
     XMMATRIX GetViewMatrix();
-    //float* GetViewMatrixFloat();
 
     void CommitCameraDataBufferUpdates();
 
@@ -348,13 +285,9 @@ public:
     Vector position;
     Vector rotation; // pitch yaw roll
 
-    float distanceToPivot;
-
     ID3D11Buffer* bufCommonPerCamera;
 
     CBufCommonPerCamera commonCameraData;
-
-    XMMATRIX viewMatrix;
 };
 
 class CDXParentHandler
@@ -369,16 +302,7 @@ public:
 	~CDXParentHandler() { CleanupD3D(); };
 
 	bool SetupDeviceD3D();
-    void UpdateProjectionMatrix();
 	void CleanupD3D();
-    void CleanupForPreviewResize()
-    {
-        DX_RELEASE_PTR(m_previewState.frameBuffer);
-        DX_RELEASE_PTR(m_previewState.frameBufferSRV);
-        DX_RELEASE_PTR(m_previewState.previewRTV);
-        DX_RELEASE_PTR(m_previewState.previewDSV);
-        DX_RELEASE_PTR(m_previewState.previewDepthBuffer);
-    };
 
 	void HandleResize(const uint16_t x, const uint16_t y);
 	bool HandleWindowChange(HWND hWnd);
@@ -403,16 +327,10 @@ public:
 	inline IDXGISwapChain* GetSwapChain() const { return m_pSwapChain; };
 	inline ID3D11RenderTargetView* GetMainView() const { return m_pMainView; };
     inline ID3D11DepthStencilView* GetDepthStencilView() const { return m_pDepthStencilView; };
-    inline ID3D11DepthStencilState* GetDepthStencilState(bool depthTest=true) { return depthTest ? m_pDepthStencilState : m_pDepthStencilStateNoDepthTest; };
+    inline ID3D11DepthStencilState* GetDepthStencilState() { return m_pDepthStencilState; };
     inline ID3D11RasterizerState* GetRasterizerState() const { return m_pRasterizerState; };
-    inline ID3D11RasterizerState* GetRasterizerStateWireFrame() const { return m_pRasterizerStateWF; };
     inline ID3D11SamplerState* GetSamplerState() const { return m_pSamplerState; };
     inline ID3D11SamplerState* GetSamplerComparisonState() const { return m_pSamplerCmpState; };
-
-    inline ID3D11Texture2D* GetPreviewFrameBuffer() const { return m_previewState.frameBuffer; };
-    inline ID3D11ShaderResourceView* GetPreviewFrameBufferSRV() const { return m_previewState.frameBufferSRV; };
-    inline ID3D11RenderTargetView* GetPreviewRTV() const { return m_previewState.previewRTV; };
-    inline ID3D11DepthStencilView* GetPreviewDSV() const { return m_previewState.previewDSV; };
 
     inline const uint32_t GetActiveMonitor() const { return m_activeMonitor; }
     // returns true if the monitors have a shared adapter
@@ -425,7 +343,6 @@ public:
     };
 
     inline const XMMATRIX& GetProjMatrix() { return m_projectionMatrix; };
-    inline const float* GetProjMatrixFloat() const { return (float*)&m_projectionMatrix; };
 
     inline CDXShaderManager* GetShaderManager() const { return m_pShaderManager; };
 
@@ -441,10 +358,8 @@ public:
     inline ID3D11ShaderResourceView* GetCSMDepthAtlasSamplerSRV() { return m_CSMDepthAtlasSamplerSRV; };
     inline ID3D11ShaderResourceView* GetStaticShadowTexSRV() { return m_staticShadowTextureSRV; };
 
-
-    bool CreateViewForSceneWindow(const uint16_t w, const uint16_t h);
 private:
-    bool CreateDepthBuffer(ID3D11Texture2D* const frameBuffer, ID3D11Texture2D** depthBuffer, ID3D11DepthStencilView** depthStencilView);
+    bool CreateDepthBuffer(ID3D11Texture2D* frameBuffer);
 	bool CreateMainView(const uint16_t w, const uint16_t h);
 
     bool CreateMisc();
@@ -462,13 +377,8 @@ private:
 	IDXGISwapChain* m_pSwapChain;
 	ID3D11RenderTargetView* m_pMainView;
     ID3D11DepthStencilView* m_pDepthStencilView;
-    ID3D11Texture2D* m_pDepthBuffer;
-
-    ID3D11DepthStencilState* m_pDepthStencilStateNoDepthTest; // depth disabled
     ID3D11DepthStencilState* m_pDepthStencilState; // depth enabled
-
     ID3D11RasterizerState* m_pRasterizerState; // main rasterizer state
-    ID3D11RasterizerState* m_pRasterizerStateWF; // main rasterizer state
     ID3D11SamplerState* m_pSamplerState;
     ID3D11SamplerState* m_pSamplerCmpState; // sampler comparison state because obviously we need this?
 
@@ -485,9 +395,6 @@ private:
     MonitorAdapter_t* m_pMonitors;
     uint32_t m_numMonitors;
     uint32_t m_activeMonitor;
-
-    uint16_t renderWidth;
-    uint16_t renderHeight;
 
     XMMATRIX m_projectionMatrix;
 
@@ -509,14 +416,6 @@ private:
 
     ID3D11Texture2D* m_staticShadowTexture;
     ID3D11ShaderResourceView* m_staticShadowTextureSRV;
-
-    struct {
-        ID3D11Texture2D* frameBuffer;
-        ID3D11ShaderResourceView* frameBufferSRV;
-        ID3D11RenderTargetView* previewRTV;
-        ID3D11DepthStencilView* previewDSV;
-        ID3D11Texture2D* previewDepthBuffer;
-    } m_previewState;
 
 
     CDXScene m_Scene;

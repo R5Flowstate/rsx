@@ -59,11 +59,13 @@ SettingsKVValue_t::~SettingsKVValue_t()
 		case eSettingsFieldType::ST_ARRAY:
 		case eSettingsFieldType::ST_DYN_ARRAY:
 		{
+			printf("Deleting settings array\n");
 			delete[] getValue<SettingsKVValue_t*>();
 			break;
 		}
 		case eSettingsFieldType::_ST_OBJECT:
 		{
+			printf("Deleting settings object\n");
 			delete[] getValue<SettingsKVField_t*>();
 			break;
 		}
@@ -82,9 +84,7 @@ bool SettingsAsset::ParseSettingsData()
 	// If the layout asset wasn't available when the load function was called, try again here.
 	// If there still isn't a valid layout asset, return early
 	if (!this->layoutAsset && !(this->layoutAsset = g_assetData.FindAssetByGUID<CPakAsset>(this->layoutGuid)))
-		return false;
-
-	assert(this->layoutAsset->GetPostLoadStatus());
+			return false;
 
 	if (_fields)
 	{
@@ -300,7 +300,7 @@ void SettingsAsset::R_WriteSetFile(std::string& out, const size_t indentLevel, c
 	case eSettingsFieldType::ST_ASSET_NOPRECACHE:
 	{
 		const char* const charBuf = *(const char**)&valData[field->valueOffset];
-		out.append(std::format("\"{:s}\"", EscapeString(charBuf)));
+		out.append(std::format("\"{:s}\"", charBuf));
 		break;
 	}
 	case eSettingsFieldType::ST_ARRAY:
@@ -399,7 +399,7 @@ void SettingsAsset::R_WriteModValues(std::string& out, const SettingsLayoutAsset
 		}
 		else
 		{
-			//assert(0);
+			assert(0);
 			out += "// FAILURE( !!! SETTINGS FIELD NOT FOUND !!! )\n";
 		}
 
@@ -462,7 +462,7 @@ bool ExportSettingsAsset(CAsset* const asset, const int setting)
 	if (!RenderSettingsAsset(pakAsset, stringStream))
 		return false;
 
-	std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+	std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
 	std::filesystem::path stgsPath = asset->GetAssetName();
 
 	exportPath.append(stgsPath.parent_path().string());

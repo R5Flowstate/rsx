@@ -128,18 +128,6 @@ struct ShaderSetAssetHeader_v14_t
 static_assert(sizeof(ShaderSetAssetHeader_v14_t) == 64);
 
 
-struct ShaderSetAssetHeader_v15_t
-{
-	char gap0[64];
-
-	// i don't know what the rest of this data does atm. i'll reverse it properly later
-
-	uint64_t vertexShader;
-	uint64_t pixelShader;
-};
-static_assert(sizeof(ShaderSetAssetHeader_v15_t) == 80);
-static_assert(offsetof(ShaderSetAssetHeader_v15_t, pixelShader) == 72);
-
 class ShaderSetAsset
 {
 public:
@@ -154,9 +142,6 @@ public:
 	{ };
 	ShaderSetAsset(ShaderSetAssetHeader_v14_t* const hdr) : name(hdr->name), numVertexShaderTextures(hdr->textureInputCounts[1] - hdr->textureInputCounts[0]), numPixelShaderTextures(hdr->textureInputCounts[0]), numSamplers(hdr->numSamplers), firstResourceBindPoint(hdr->firstResourceBindPoint), numResources(hdr->numResources), vertexShader(hdr->vertexShader), pixelShader(hdr->pixelShader), vertexShaderAsset(nullptr), pixelShaderAsset(nullptr)
 	{ };
-	ShaderSetAsset(ShaderSetAssetHeader_v15_t* const hdr) : name(), numVertexShaderTextures(), numPixelShaderTextures(), numSamplers(), firstResourceBindPoint(), numResources(), vertexShader(hdr->vertexShader), pixelShader(hdr->pixelShader), vertexShaderAsset(nullptr), pixelShaderAsset(nullptr)
-	{
-	};
 
 	char* name;
 

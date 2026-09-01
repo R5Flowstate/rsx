@@ -1,1 +1,0 @@
-# UI Image Atlas (`uimg`)

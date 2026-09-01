@@ -37,7 +37,6 @@ struct studiohdr_generic_t
 	studiohdr_generic_t(const r5::studiohdr_v14_t* const pHdr, const int version);
 	studiohdr_generic_t(const r5::studiohdr_v16_t* const pHdr, int dataSizePhys, int dataSizeModel);
 	studiohdr_generic_t(const r5::studiohdr_v17_t* const pHdr, int dataSizePhys, int dataSizeModel);
-	studiohdr_generic_t(const r5::studiohdr_v19_2_t* const pHdr, int dataSizePhys, int dataSizeModel);
 
 	const char* baseptr;	// studiohdr_t pointer and by extension mdl/rmdl ptr
 

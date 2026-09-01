@@ -5,7 +5,7 @@
 #include <game/rtech/utils/utils.h>
 #include <thirdparty/imgui/imgui.h>
 
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 void LoadTextureAnimationAsset(CAssetContainer* const container, CAsset* const asset)
 {
@@ -48,11 +48,11 @@ bool ExportTextureAnimationAsset(CAsset* const asset, const int setting)
 
     TextureAnimAssetHeader_v1_t* const hdr = reinterpret_cast<TextureAnimAssetHeader_v1_t*>(pakAsset->header());
 
-    std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+    std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
     const std::filesystem::path txanPath(asset->GetAssetName());
 
     // truncate paths?
-    if (g_rsxSettings.exportPathsFull)
+    if (g_ExportSettings.exportPathsFull)
         exportPath.append(txanPath.parent_path().string());
     else
         exportPath.append(s_PathPrefixTXAN);
@@ -68,14 +68,14 @@ bool ExportTextureAnimationAsset(CAsset* const asset, const int setting)
 
     StreamIO txanOut(exportPath.string(), eStreamIOMode::Write);
 
-    TextureAnimFileHeader_t fileHdr{
-        .magic = TXAN_FILE_MAGIC,
-        .fileVersion = TXAN_FILE_VERSION,
-        .assetVersion = static_cast<unsigned short>(pakAsset->data()->version),
-        .layerCount = static_cast<unsigned int>(hdr->layerCount),
-        .slotCount = static_cast<unsigned int>(GetSlotCount(hdr))
-    };
-    
+    TextureAnimFileHeader_t fileHdr;
+
+    fileHdr.magic = TXAN_FILE_MAGIC;
+    fileHdr.fileVersion = TXAN_FILE_VERSION;
+    fileHdr.assetVersion = static_cast<unsigned short>(pakAsset->data()->version);
+    fileHdr.layerCount = hdr->layerCount;
+    fileHdr.slotCount = GetSlotCount(hdr);
+
     txanOut.write(fileHdr);
     txanOut.write((const char*)hdr->layers, fileHdr.layerCount * sizeof(TextureAnimLayer_t));
     txanOut.write((const char*)hdr->slots, fileHdr.slotCount);

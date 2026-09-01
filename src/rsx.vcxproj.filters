@@ -94,21 +94,6 @@
     <Filter Include="core\render\preview">
       <UniqueIdentifier>{50a690ff-57d0-4929-89e8-cc6bf2f31238}</UniqueIdentifier>
     </Filter>
-    <Filter Include="core\update">
-      <UniqueIdentifier>{f819a795-d086-4c82-9fad-17af48e6abb4}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="thirdparty\miniaudio">
-      <UniqueIdentifier>{3fcc9b5e-2aa1-4519-8659-18cde944d60b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="core\audio">
-      <UniqueIdentifier>{f862f8b4-f4d4-4035-b79f-05b904f551b5}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="thirdparty\ValveFileVDF">
-      <UniqueIdentifier>{955a9656-f388-4f2e-893f-47097eb705bc}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="game\vpk">
-      <UniqueIdentifier>{20e17b08-8fd9-421f-8a16-9e0992bf2f76}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -258,9 +243,6 @@
     <ClInclude Include="core\window.h">
       <Filter>core</Filter>
     </ClInclude>
-    <ClInclude Include="core\splash.h">
-      <Filter>core</Filter>
-    </ClInclude>
     <ClInclude Include="core\render.h">
       <Filter>core</Filter>
     </ClInclude>
@@ -375,6 +357,9 @@
     <ClInclude Include="core\mdl\modeldata.h">
       <Filter>core\mdl</Filter>
     </ClInclude>
+    <ClInclude Include="core\mdl\anim_qc.h">
+      <Filter>core\mdl</Filter>
+    </ClInclude>
     <ClInclude Include="game\rtech\assets\material_snapshot.h">
       <Filter>game\rtech\assets</Filter>
     </ClInclude>
@@ -444,65 +429,8 @@
     <ClInclude Include="core\render\preview\preview.h">
       <Filter>core\render\preview</Filter>
     </ClInclude>
-    <ClInclude Include="core\utils\jsonutils.h">
-      <Filter>core\utils</Filter>
-    </ClInclude>
-    <ClInclude Include="core\utils\curlutils.h">
-      <Filter>core\utils</Filter>
-    </ClInclude>
-    <ClInclude Include="core\update\update.h">
-      <Filter>core\update</Filter>
-    </ClInclude>
-    <ClInclude Include="core\version.h">
-      <Filter>core</Filter>
-    </ClInclude>
-    <ClInclude Include="core\render\preview\grid.h">
-      <Filter>core\render\preview</Filter>
-    </ClInclude>
-    <ClInclude Include="thirdparty\imgui\misc\imoguizmo.hpp">
-      <Filter>thirdparty\imgui\misc</Filter>
-    </ClInclude>
-    <ClInclude Include="game\rtech\assets\cube.h">
-      <Filter>game\rtech\assets</Filter>
-    </ClInclude>
-    <ClInclude Include="core\render\ui\styles.h">
-      <Filter>core\render\ui</Filter>
-    </ClInclude>
-    <ClInclude Include="core\fonts\codicons.h">
-      <Filter>core\fonts</Filter>
-    </ClInclude>
-    <ClInclude Include="thirdparty\miniaudio\miniaudio.h">
-      <Filter>thirdparty\miniaudio</Filter>
-    </ClInclude>
-    <ClInclude Include="core\audio\audioplayer.h">
-      <Filter>core\audio</Filter>
-    </ClInclude>
-    <ClInclude Include="core\filehandling\validation.h">
-      <Filter>core\filehandling</Filter>
-    </ClInclude>
-    <ClInclude Include="thirdparty\imgui\misc\imgui_memory_editor.h">
-      <Filter>thirdparty\imgui\misc</Filter>
-    </ClInclude>
-    <ClInclude Include="core\utils\gamefinder.h">
-      <Filter>core\utils</Filter>
-    </ClInclude>
-    <ClInclude Include="thirdparty\valvefilevdf\vdf_parser.hpp">
-      <Filter>thirdparty\ValveFileVDF</Filter>
-    </ClInclude>
-    <ClInclude Include="thirdparty\imgui\misc\ImGuiNotify.hpp">
-      <Filter>thirdparty\imgui\misc</Filter>
-    </ClInclude>
-    <ClInclude Include="game\vpk\vpk.h">
-      <Filter>game\vpk</Filter>
-    </ClInclude>
-    <ClInclude Include="core\bridge\bridge.h" />
-    <ClInclude Include="thirdparty\rad_lzb_simple\rad_lzb_simple.h" />
-    <ClInclude Include="game\audio\source.h">
-      <Filter>game\audio</Filter>
-    </ClInclude>
-    <ClInclude Include="game\audio\event.h">
-      <Filter>game\audio</Filter>
-    </ClInclude>
+    <ClInclude Include="core\utils\autoupdater.h" />
+    <ClInclude Include="game\rtech\utils\zstd_loader.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -629,9 +557,6 @@
       <Filter>game\rtech\assets</Filter>
     </ClCompile>
     <ClCompile Include="core\window.cpp">
-      <Filter>core</Filter>
-    </ClCompile>
-    <ClCompile Include="core\splash.cpp">
       <Filter>core</Filter>
     </ClCompile>
     <ClCompile Include="core\render.cpp">
@@ -784,6 +709,9 @@
     <ClCompile Include="core\mdl\animdata.cpp">
       <Filter>core\mdl</Filter>
     </ClCompile>
+    <ClCompile Include="core\mdl\anim_qc.cpp">
+      <Filter>core\mdl</Filter>
+    </ClCompile>
     <ClCompile Include="core\mdl\modeldata_qc.cpp">
       <Filter>core\mdl</Filter>
     </ClCompile>
@@ -799,64 +727,22 @@
     <ClCompile Include="core\render\ui\log_window.cpp">
       <Filter>core\render\ui</Filter>
     </ClCompile>
+    <ClCompile Include="core\render\preview\audio_preview.cpp">
+      <Filter>core\render\preview</Filter>
+    </ClCompile>
     <ClCompile Include="core\render\preview\preview.cpp">
       <Filter>core\render\preview</Filter>
     </ClCompile>
     <ClCompile Include="core\render\ui\itemflav_window.cpp">
       <Filter>core\render\ui</Filter>
     </ClCompile>
-    <ClCompile Include="core\utils\jsonutils.cpp">
-      <Filter>core\utils</Filter>
-    </ClCompile>
-    <ClCompile Include="core\utils\curlutils.cpp">
-      <Filter>core\utils</Filter>
-    </ClCompile>
-    <ClCompile Include="core\update\update.cpp">
-      <Filter>core\update</Filter>
-    </ClCompile>
-    <ClCompile Include="game\rtech\assets\cube.cpp">
-      <Filter>game\rtech\assets</Filter>
-    </ClCompile>
-    <ClCompile Include="core\render\preview\mdlpreview.cpp">
-      <Filter>core\render\preview</Filter>
-    </ClCompile>
-    <ClCompile Include="thirdparty\miniaudio\miniaudio.c">
-      <Filter>thirdparty\miniaudio</Filter>
-    </ClCompile>
-    <ClCompile Include="core\audio\audioplayer.cpp">
-      <Filter>core\audio</Filter>
-    </ClCompile>
-    <ClCompile Include="core\filehandling\validation.cpp">
-      <Filter>core\filehandling</Filter>
-    </ClCompile>
-    <ClCompile Include="core\render\preview\grid.cpp">
-      <Filter>core\render\preview</Filter>
-    </ClCompile>
-    <ClCompile Include="core\render\preview\texpreview.cpp">
-      <Filter>core\render\preview</Filter>
-    </ClCompile>
-    <ClCompile Include="game\vpk\vpk.cpp">
-      <Filter>game\vpk</Filter>
-    </ClCompile>
-    <ClCompile Include="core\filehandling\valvepak.cpp">
-      <Filter>core\filehandling</Filter>
-    </ClCompile>
-    <ClCompile Include="core\bridge\bridge.cpp" />
-    <ClCompile Include="thirdparty\rad_lzb_simple\rad_lzb_simple.c" />
-    <ClCompile Include="game\audio\source.cpp">
-      <Filter>game\audio</Filter>
-    </ClCompile>
-    <ClCompile Include="game\audio\event.cpp">
-      <Filter>game\audio</Filter>
-    </ClCompile>
+    <ClCompile Include="core\utils\autoupdater.cpp" />
+    <ClCompile Include="game\rtech\utils\zstd_loader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="resources\splashimage.bmp">
-      <Filter>resources</Filter>
-    </Image>
     <Image Include="resources\icon.ico" />
   </ItemGroup>
   <ItemGroup>

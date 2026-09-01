@@ -12,30 +12,11 @@ struct matrix3x4_t
 	float* Base() { return &m_flMatVal[0][0]; }
 	const float* Base() const { return &m_flMatVal[0][0]; }
 
-	static matrix3x4_t Identity() {
-		return matrix3x4_t{
-			 1, 0, 0, 0,
-			0, 1, 0, 0,
-			0, 0, 1, 0,
-		};
-	}
-
-	std::string AsString() const {
-		return std::format(
-			"{} {} {} {}\n"
-			"{} {} {} {}\n"
-			"{} {} {} {}",
-			m_flMatVal[0][0], m_flMatVal[0][1], m_flMatVal[0][2], m_flMatVal[0][3],
-			m_flMatVal[1][0], m_flMatVal[1][1], m_flMatVal[1][2], m_flMatVal[1][3],
-			m_flMatVal[2][0], m_flMatVal[2][1], m_flMatVal[2][2], m_flMatVal[2][3]);
-	}
-
 	float m_flMatVal[3][4];
 };
 
 
 void MatrixAngles(const matrix3x4_t& matrix, float* angles); // !!!!
-void MatrixInvert(const matrix3x4_t& in, matrix3x4_t& out);
 
 void MatrixGetColumn(const matrix3x4_t& in, int column, Vector& out);
 void MatrixSetColumn(const Vector& in, int column, matrix3x4_t& out);

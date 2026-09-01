@@ -13,9 +13,8 @@ public:
 
 	Vector() = default;
 	Vector(float inFl) : x(inFl), y(inFl), z(inFl) {};
-	constexpr Vector(float inX, float inY, float inZ) : x(inX), y(inY), z(inZ) {};
+	Vector(float inX, float inY, float inZ) : x(inX), y(inY), z(inZ) {};
 	Vector(const Vector& vecIn) : x(vecIn.x), y(vecIn.y), z(vecIn.z) {};
-	Vector(const XMVECTOR& vecIn) : x(vecIn.m128_f32[0]), y(vecIn.m128_f32[1]), z(vecIn.m128_f32[2]) {};
 	~Vector() {};
 
 	void Init(float inFl = 0.0f) { x = inFl; y = inFl; z = inFl; } // init float members with a value of f
@@ -59,13 +58,6 @@ public:
 	float const* Base() const { return reinterpret_cast<float const*>(this); }
 
 	static const float Dot(const Vector& a, const Vector& b); // add simd option
-
-	Vector CoordTranspose() const { return { x,z,y }; };
-
-	static Vector Lerp(const Vector& a, const Vector& b, const float frac)
-	{
-		return a + ((b - a) * frac);
-	};
 
 #ifdef MATH_USE_DX
 	inline XMVECTOR AsXMVector() const { return XMVECTOR{ x,y,z }; };
@@ -168,7 +160,6 @@ inline float DotProduct(const Vector& a, const Vector& b)
 	return(a.x * b.x + a.y * b.y + a.z * b.z);
 }
 
-// todo(rexx): can we simd this
 inline float DotProduct(const float* a, const float* b)
 {
 	return(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]);

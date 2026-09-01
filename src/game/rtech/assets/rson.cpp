@@ -3,7 +3,7 @@
 #include <game/rtech/cpakfile.h>
 #include <thirdparty/imgui/imgui.h>
 
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 void LoadRSONAsset(CAssetContainer* const container, CAsset* const asset)
 {
@@ -63,10 +63,10 @@ bool ExportRSONAsset(CAsset* const asset, const int setting)
     const RSONAsset* const rsonAsset = pakAsset->extraData<const RSONAsset* const>();
 
     // Create exported path + asset path.
-	std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+	std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
 	const std::filesystem::path rsonPath(asset->GetAssetName());
 
-	if (g_rsxSettings.exportPathsFull)
+	if (g_ExportSettings.exportPathsFull)
 		exportPath.append(rsonPath.parent_path().string());
 	else
 		exportPath.append(s_PathPrefixRSON);

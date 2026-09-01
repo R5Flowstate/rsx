@@ -21,7 +21,7 @@ enum eLogMessageColumnID
 	_LMC_COUNT,
 };
 
-void LogWnd_Draw(CUIState* uiState)
+void LogWindow_Draw(CUIState* uiState)
 {
     ImGui::SetNextWindowSize(ImVec2(0.f, 0.f), ImGuiCond_Always);
     if (ImGui::Begin("Logs", &uiState->logWindowVisible, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize))
@@ -44,8 +44,6 @@ void LogWnd_Draw(CUIState* uiState)
 			ImGui::TableSetupScrollFreeze(1, 1);
 
 			ImGui::TableHeadersRow();
-
-			std::lock_guard logLock(g_assetData.m_logMutex);
 
 			for (size_t i = 0; i < g_assetData.GetNumLogMessages(); ++i)
 			{
@@ -76,7 +74,8 @@ void LogWnd_Draw(CUIState* uiState)
 
 			ImGui::EndTable();
 		}
-    }
 
-	ImGui::End();
+
+        ImGui::End();
+    }
 }

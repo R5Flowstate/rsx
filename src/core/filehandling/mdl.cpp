@@ -88,7 +88,7 @@ void HandleMDLLoad(std::vector<std::string> filePaths)
             const char* const s_SeqPrefix = s_AssetTypePaths.find(AssetType_t::SEQ)->second;
             const std::string basePath(std::format("{}/{}/{}", s_SeqPrefix, srcMdlPath.parent_path().string(), srcMdlPath.stem().string()));
 
-            for (int32_t i = 0; i < pLocalHdr->numlocalseq; i++)
+            for (int i = 0; i < pLocalHdr->numlocalseq; i++)
             {
                 const r2::mstudioseqdesc_t* const pSeqdesc = pLocalHdr->pSeqdesc(i);
                 const std::string seqPath = std::format("{}/{}.seq", basePath, pSeqdesc->pszLabel());

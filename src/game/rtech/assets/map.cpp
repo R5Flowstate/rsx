@@ -2,7 +2,7 @@
 #include <game/rtech/assets/map.h>
 #include <game/rtech/cpakfile.h>
 
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 void LoadMapAsset(CAssetContainer* container, CAsset* asset)
 {

@@ -2,12 +2,15 @@
 #include <game/rtech/assets/ui_font_atlas.h>
 #include <game/rtech/assets/texture.h>
 
+#include <iomanip>
+#include <fstream>
+
 #include <core/render/dx.h>
 #include <thirdparty/imgui/imgui.h>
 #include <thirdparty/imgui/misc/imgui_utility.h>
 
 extern CDXParentHandler* g_dxHandler;
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 // ui font header
 inline const uint32_t UIFontHeader::GetTextureIndexFromUnicodeMap(int unicode) const
@@ -86,10 +89,7 @@ const uint32_t UIFontHeader::TextureFromUnicode(int unicode) const
         unicode = FONT_UTF16_BOX;
     }
 
-#if (PAKLOAD_DEBUG == PAKLOAD_DEBUG_VERBOSE)
-    // very spammy print
     Log("Font %s doesn't have the code point U+%04X which is required to display a missing glyph.\n", name, FONT_UTF16_BOX);
-#endif
 
     return FONT_TEXTURE_IDX_INVALID;
 }
@@ -120,7 +120,7 @@ const uint32_t UIFontHeader::TextureFromGlyph(int glyph) const
         glyph = LOBYTE(errorGlyph) << 16; // 
     }
 
-    Log("FONT: %s doesn't have the glyph index %u which is required to display a missing glyph.\n", name, 0u);
+    Log("Font %s doesn't have the glyph index %u which is required to display a missing glyph.\n", name, 0u);
 
     return FONT_TEXTURE_IDX_INVALID;
 }
@@ -340,17 +340,27 @@ void PostLoadUIFontAtlasAsset(CAssetContainer* const pak, CAsset* const asset)
 	UIFontAtlasAsset* const fontAsset = reinterpret_cast<UIFontAtlasAsset*>(pakAsset->extraData());
 
 	CPakAsset* const textureAsset = g_assetData.FindAssetByGUID<CPakAsset>(fontAsset->atlasGUID);
-	assertm(textureAsset, "Asset should be valid.");
+	if (!textureAsset)
+	{
+		pakAsset->SetAssetNameFromCache();
+		return;
+	}
 
 	TextureAsset* const txtrAsset = reinterpret_cast<TextureAsset*>(textureAsset->extraData());
+	if (!txtrAsset)
+	{
+		pakAsset->SetAssetNameFromCache();
+		return;
+	}
 
 	if (txtrAsset->name)
 	{
-		const std::string atlasName = "ui_font_atlas/" + std::string(txtrAsset->name) + ".rpak";
+		std::string atlasName = "ui_font_atlas/" + std::string(txtrAsset->name) + ".rpak";
 
-		assertm(pakAsset->data()->guid == RTech::StringToGuid(atlasName.c_str()), "hashed name for atlas did not match existing guid\n");
-
-		pakAsset->SetAssetName(atlasName, true);
+		if (pakAsset->data()->guid == RTech::StringToGuid(atlasName.c_str()))
+			pakAsset->SetAssetName(atlasName, true);
+		else
+			pakAsset->SetAssetNameFromCache();
 	}
     else
     {
@@ -749,6 +759,7 @@ void* PreviewUIFontAtlasAsset(CAsset* const asset, const bool firstFrameForAsset
 
 enum eUIFontAtlasExportSetting
 {
+    JSON_M, // JSON (Metadata + DDS atlas)
     PNG_AT, // PNG (Atlas)
     PNG_T,  // PNG (Textures)
     DDS_AT, // DDS (Atlas)
@@ -765,11 +776,11 @@ bool ExportUIFontAtlasAsset(CAsset* const asset, const int setting)
     UIFontAtlasAsset* const uiAsset = reinterpret_cast<UIFontAtlasAsset*>(pakAsset->extraData());
 
     // Create exported path + asset path.
-    std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+    std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
     const std::filesystem::path atlasPath(pakAsset->GetAssetName());
 
     // truncate paths?
-    if (g_rsxSettings.exportPathsFull)
+    if (g_ExportSettings.exportPathsFull)
         exportPath.append(atlasPath.parent_path().string());
     else
         exportPath.append(s_PathPrefixFONT);
@@ -899,6 +910,233 @@ bool ExportUIFontAtlasAsset(CAsset* const asset, const int setting)
 
         return true;
     }
+    case eUIFontAtlasExportSetting::JSON_M:
+    {
+        const int version = pakAsset->version();
+
+        if (version != 7 && version != 10)
+        {
+            Log("JSON export only supports font atlas v7/v10 (got v%d)\n", version);
+            return false;
+        }
+
+        // Export atlas texture as DDS alongside JSON
+        assertm(uiAsset->txtrRaw, "Atlas texture was not valid.");
+        if (uiAsset->txtrRaw)
+        {
+            std::filesystem::path ddsPath = exportPath;
+            ddsPath.replace_extension(".dds");
+            if (!uiAsset->txtrRaw->ExportAsDds(ddsPath))
+                Log("Failed to export atlas texture as DDS\n");
+        }
+
+        exportPath.replace_extension(".json");
+        std::ofstream ofs(exportPath, std::ios::out);
+
+        if (!ofs.is_open())
+        {
+            assertm(false, "Failed to open JSON file for writing");
+            return false;
+        }
+
+        CPakAsset* const textureAsset = g_assetData.FindAssetByGUID<CPakAsset>(uiAsset->atlasGUID);
+        std::string atlasTexturePath = textureAsset ? textureAsset->GetAssetName() : std::format("0x{:016X}", uiAsset->atlasGUID);
+        FixSlashes(atlasTexturePath);
+
+        std::string assetName = pakAsset->GetAssetName();
+        FixSlashes(assetName);
+
+        // Calculate CPU data extent from font header pointers
+        const UIFontHeader_v7_t* rawFonts = reinterpret_cast<const UIFontHeader_v7_t*>(uiAsset->fonts);
+
+        uintptr_t minAddr = reinterpret_cast<uintptr_t>(rawFonts);
+        uintptr_t maxAddr = minAddr + (uiAsset->fontCount * sizeof(UIFontHeader_v7_t));
+
+        for (uint16_t fontIdx = 0; fontIdx < uiAsset->fontCount; fontIdx++)
+        {
+            const UIFontHeader_v7_t& rawFont = rawFonts[fontIdx];
+
+            if (rawFont.proportions)
+            {
+                uintptr_t propEnd = reinterpret_cast<uintptr_t>(rawFont.proportions) + (rawFont.numProportions * sizeof(UIFontProportion_v7_t));
+                if (propEnd > maxAddr) maxAddr = propEnd;
+            }
+
+            // +1 for trailing sentinel entry
+            if (rawFont.textures)
+            {
+                uintptr_t texEnd = reinterpret_cast<uintptr_t>(rawFont.textures) + ((rawFont.numTextures + 1) * sizeof(UIFontTexture_v7_t));
+                if (texEnd > maxAddr) maxAddr = texEnd;
+            }
+
+            if (rawFont.unicodeChunks)
+            {
+                uintptr_t chunkEnd = reinterpret_cast<uintptr_t>(rawFont.unicodeChunks) + (rawFont.numUnicodeChunks * sizeof(uint16_t));
+                if (chunkEnd > maxAddr) maxAddr = chunkEnd;
+            }
+
+            uint16_t maxChunkTableIndex = 0;
+            for (uint16_t i = 0; i < rawFont.numUnicodeChunks; i++)
+            {
+                if (rawFont.unicodeChunks[i] > maxChunkTableIndex)
+                    maxChunkTableIndex = rawFont.unicodeChunks[i];
+            }
+            const uint16_t chunkTableSize = maxChunkTableIndex + 1;
+
+            if (rawFont.unicodeChunksIndex)
+            {
+                uintptr_t idxEnd = reinterpret_cast<uintptr_t>(rawFont.unicodeChunksIndex) + (chunkTableSize * sizeof(uint16_t));
+                if (idxEnd > maxAddr) maxAddr = idxEnd;
+            }
+
+            if (rawFont.unicodeChunksMask)
+            {
+                uintptr_t maskEnd = reinterpret_cast<uintptr_t>(rawFont.unicodeChunksMask) + (chunkTableSize * sizeof(uint64_t));
+                if (maskEnd > maxAddr) maxAddr = maskEnd;
+            }
+
+            if (rawFont.name)
+            {
+                uintptr_t nameEnd = reinterpret_cast<uintptr_t>(rawFont.name) + strlen(rawFont.name) + 1;
+                if (nameEnd > maxAddr) maxAddr = nameEnd;
+            }
+        }
+
+        const UIFontAtlasAssetHeader_v6_t* rawHeader = reinterpret_cast<const UIFontAtlasAssetHeader_v6_t*>(pakAsset->header());
+        const size_t headerSize = sizeof(UIFontAtlasAssetHeader_v6_t);
+
+        if (rawHeader->unk_18 && rawHeader->unk_2 > 0)
+        {
+            uintptr_t unk18Addr = reinterpret_cast<uintptr_t>(rawHeader->unk_18);
+            if (unk18Addr < minAddr) minAddr = unk18Addr;
+        }
+
+        const size_t cpuDataSize = maxAddr - minAddr;
+        const char* cpuDataPtr = reinterpret_cast<const char*>(minAddr);
+
+        auto toRelOffset = [minAddr](const void* ptr) -> int64_t {
+            if (!ptr) return -1;
+            return static_cast<int64_t>(reinterpret_cast<uintptr_t>(ptr) - minAddr);
+        };
+
+        ofs << "{\n";
+        ofs << "\t\"_type\": \"font\",\n";
+        ofs << "\t\"_version\": " << version << ",\n";
+        ofs << "\t\"_path\": \"" << assetName << "\",\n";
+        ofs << "\t\"atlas\": \"" << atlasTexturePath << "\",\n";
+        ofs << "\t\"atlasGuid\": \"0x" << std::uppercase << std::hex << uiAsset->atlasGUID << std::dec << "\",\n";
+        ofs << "\t\"width\": " << uiAsset->width << ",\n";
+        ofs << "\t\"height\": " << uiAsset->height << ",\n";
+        ofs << "\t\"fontCount\": " << uiAsset->fontCount << ",\n";
+
+        // Raw header hex
+        ofs << "\t\"headerDataHex\": \"";
+        const char* headerPtr = reinterpret_cast<const char*>(rawHeader);
+        for (size_t i = 0; i < headerSize; i++)
+        {
+            ofs << std::uppercase << std::hex << std::setw(2) << std::setfill('0')
+                << static_cast<int>(static_cast<uint8_t>(headerPtr[i]));
+        }
+        ofs << std::dec << "\",\n";
+
+        ofs << "\t\"unk_2\": " << rawHeader->unk_2 << ",\n";
+        ofs << "\t\"unk_18Offset\": " << toRelOffset(rawHeader->unk_18) << ",\n";
+
+        // Font pointer fixup offsets
+        ofs << "\t\"fontFixups\": [\n";
+        for (uint16_t fontIdx = 0; fontIdx < uiAsset->fontCount; fontIdx++)
+        {
+            const UIFontHeader_v7_t& rawFont = rawFonts[fontIdx];
+            const size_t fontOffset = fontIdx * sizeof(UIFontHeader_v7_t);
+
+            uint16_t maxChunkTableIndex = 0;
+            for (uint16_t i = 0; i < rawFont.numUnicodeChunks; i++)
+            {
+                if (rawFont.unicodeChunks[i] > maxChunkTableIndex)
+                    maxChunkTableIndex = rawFont.unicodeChunks[i];
+            }
+            const uint16_t chunkTableSize = maxChunkTableIndex + 1;
+
+            ofs << "\t\t{\n";
+            ofs << "\t\t\t\"fontOffset\": " << fontOffset << ",\n";
+            ofs << "\t\t\t\"nameOffset\": " << toRelOffset(rawFont.name) << ",\n";
+            ofs << "\t\t\t\"unicodeChunksOffset\": " << toRelOffset(rawFont.unicodeChunks) << ",\n";
+            ofs << "\t\t\t\"unicodeChunksIndexOffset\": " << toRelOffset(rawFont.unicodeChunksIndex) << ",\n";
+            ofs << "\t\t\t\"unicodeChunksMaskOffset\": " << toRelOffset(rawFont.unicodeChunksMask) << ",\n";
+            ofs << "\t\t\t\"proportionsOffset\": " << toRelOffset(rawFont.proportions) << ",\n";
+            ofs << "\t\t\t\"texturesOffset\": " << toRelOffset(rawFont.textures) << ",\n";
+            ofs << "\t\t\t\"unk_58_Offset\": " << toRelOffset(rawFont.unk_58) << ",\n";
+            ofs << "\t\t\t\"numProportions\": " << rawFont.numProportions << ",\n";
+            ofs << "\t\t\t\"numTextures\": " << rawFont.numTextures << ",\n";
+            ofs << "\t\t\t\"numUnicodeChunks\": " << rawFont.numUnicodeChunks << ",\n";
+            ofs << "\t\t\t\"chunkTableSize\": " << chunkTableSize << "\n";
+            const char* fontComma = (fontIdx < uiAsset->fontCount - 1) ? "," : "";
+            ofs << "\t\t}" << fontComma << "\n";
+        }
+        ofs << "\t],\n";
+
+        // CPU data hex blob
+        ofs << "\t\"cpuDataSize\": " << cpuDataSize << ",\n";
+        ofs << "\t\"cpuDataHex\": \"";
+        for (size_t i = 0; i < cpuDataSize; i++)
+        {
+            ofs << std::uppercase << std::hex << std::setw(2) << std::setfill('0')
+                << static_cast<int>(static_cast<uint8_t>(cpuDataPtr[i]));
+        }
+        ofs << std::dec << "\",\n";
+
+        // Comprehensive pointer fixups via rpak descriptor table
+        {
+            CPakFile* pak = pakAsset->GetContainerFile<CPakFile>();
+            const PakAsset_t* assetData = pakAsset->data();
+
+            const auto& pageBuffersRef = pak->GetPageBuffers();
+            char* hdrPtr = reinterpret_cast<char*>(pakAsset->header());
+            char* cpuPtr = pakAsset->cpu();
+
+            int headPageIndex = -1;
+            int cpuPageIndex = -1;
+
+            const PakPageHdr_t* pageHdrs = reinterpret_cast<const PakPageHdr_t*>(
+                reinterpret_cast<const char*>(pak->header()->GetPageHeaders()));
+
+            for (size_t i = 0; i < pageBuffersRef.size() && i < static_cast<size_t>(pak->pageCount()); i++)
+            {
+                if (!pageBuffersRef[i]) continue;
+
+                char* pageStart = pageBuffersRef[i];
+                char* pageEnd = pageStart + pageHdrs[i].size;
+
+                if (hdrPtr >= pageStart && hdrPtr < pageEnd)
+                    headPageIndex = static_cast<int>(i);
+
+                if (cpuPtr && cpuPtr >= pageStart && cpuPtr < pageEnd)
+                    cpuPageIndex = static_cast<int>(i);
+            }
+
+            uint32_t headBaseOffset = 0;
+            uint32_t cpuBaseOffset = 0;
+            if (headPageIndex >= 0 && static_cast<size_t>(headPageIndex) < pageBuffersRef.size())
+                headBaseOffset = static_cast<uint32_t>(hdrPtr - pageBuffersRef[headPageIndex]);
+            if (cpuPageIndex >= 0 && static_cast<size_t>(cpuPageIndex) < pageBuffersRef.size())
+                cpuBaseOffset = static_cast<uint32_t>(cpuPtr - pageBuffersRef[cpuPageIndex]);
+
+            uint32_t headSize = assetData->headerStructSize;
+            uint32_t cpuSizeForFixups = static_cast<uint32_t>(cpuDataSize);
+
+            auto fixups = pak->CollectAssetPointerFixups(
+                headPageIndex, headBaseOffset, headSize,
+                cpuPageIndex, cpuBaseOffset, cpuSizeForFixups);
+
+            ofs << "\t" << CPakFile::SerializePointerFixupsToJSON(fixups, headPageIndex, cpuPageIndex,
+                                                                   headBaseOffset, cpuBaseOffset) << "\n";
+        }
+
+        ofs << "}\n";
+        ofs.close();
+        Log("Exported font atlas JSON: cpuData=%zu bytes, %u fonts\n", cpuDataSize, uiAsset->fontCount);
+        return true;
+    }
     default:
     {
         assertm(false, "Export setting is not handled.");
@@ -911,7 +1149,7 @@ bool ExportUIFontAtlasAsset(CAsset* const asset, const int setting)
 
 void InitUIFontAtlasAssetType()
 {
-    static const char* settings[] = { "PNG (Atlas)", "PNG (Textures)", "DDS (Atlas)", "DDS (Textures)" };
+    static const char* settings[] = { "JSON", "PNG (Atlas)", "PNG (Textures)", "DDS (Atlas)", "DDS (Textures)" };
     AssetTypeBinding_t type =
     {
         .name = "UI Font",

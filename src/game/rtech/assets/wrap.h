@@ -1,9 +1,14 @@
 #pragma once
-#include <game/vpk/vpk.h>
 
 #define WRAP_FLAG_FILE_IS_COMPRESSED	0x1   // First bit seems to indicate the asset is compressed.
 #define WRAP_FLAG_FILE_IS_PERMANENT		0x4   // Fourth bit seems to indicate that the asset is streamed.
 #define WRAP_FLAG_FILE_IS_STREAMED		0x10
+
+enum class eWrapAssetParsedDataType
+{
+	NONE = 0, // if there's no special parsed data
+	BSP,      // wrap asset is a base BSP file and contains a CBSPData pointer
+};
 
 struct WrapAssetHeader_v1_t
 {
@@ -30,19 +35,17 @@ struct WrapAssetHeader_v7_t
 	uint8_t unk5[2];
 };
 
-
-
 class WrapAsset
 {
 public:
 	WrapAsset() = default;
 	WrapAsset(WrapAssetHeader_v1_t* const hdr) : path(nullptr), data(hdr->data), cmpSize(hdr->size), dcmpSize(hdr->size), pathSize(0u), skipFirstFolderPos(0u),
-		fileNamePos(0u), flags(0u), skipSize(0u), isCompressed(false), isStreamed(false), parsedData(nullptr), type(VPKFileType_e::UNKNOWN)
+		fileNamePos(0u), flags(0u), skipSize(0u), isCompressed(false), isStreamed(false), parsedData(nullptr), parsedDataType(eWrapAssetParsedDataType::NONE)
 	{
 
 	}
 	WrapAsset(WrapAssetHeader_v7_t* const hdr) : path(hdr->path), data(hdr->data), cmpSize(hdr->cmpSize), dcmpSize(hdr->dcmpSize), pathSize(hdr->pathSize), skipFirstFolderPos(hdr->skipFirstFolderPos),
-		fileNamePos(hdr->fileNamePos), flags(hdr->flags), parsedData(nullptr), type(VPKFileType_e::UNKNOWN)
+		fileNamePos(hdr->fileNamePos), flags(hdr->flags), parsedData(nullptr), parsedDataType(eWrapAssetParsedDataType::NONE)
 	{
 		// This assert has been placed here in case we find an asset who's compressed
 		// size == decompressed size, since I don't know if we need to decompress in
@@ -62,15 +65,6 @@ public:
 		isStreamed = (flags & WRAP_FLAG_FILE_IS_STREAMED);
 	};
 
-	~WrapAsset()
-	{
-		if (type == VPKFileType_e::BSP && parsedData)
-		{
-			delete parsedData;
-			parsedData = nullptr;
-		}
-	}
-
 	char* path;
 	void* data;
 
@@ -88,10 +82,7 @@ public:
 	bool isCompressed;
 	bool isStreamed;
 
-	VPKFileType_e type;
+	eWrapAssetParsedDataType parsedDataType;
 
 	void* parsedData; // data class for something like 
-
-
-	std::unique_ptr<char[]> rawData;
 };

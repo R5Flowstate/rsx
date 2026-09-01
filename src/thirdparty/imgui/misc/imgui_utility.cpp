@@ -1,6 +1,5 @@
 #include <pch.h>
 #include <core/fonts/sourcesans.h>
-#include <core/fonts/codicons.h>
 #include <thirdparty/imgui/misc/imgui_utility.h>
 #include <thirdparty/imgui/misc/cpp/imgui_stdlib.h>
 
@@ -9,7 +8,7 @@
 
 #define ImGuiReadSetting(str, var, a, type)  if (sscanf_s(line, str, &a) == 1) { var = static_cast<type>(a); }
 
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 extern PreviewSettings_t g_PreviewSettings;
 
 // asset settings
@@ -23,7 +22,7 @@ static void* AssetSettings_ReadOpen(ImGuiContext* const ctx, ImGuiSettingsHandle
         std::string asset = fourCCToString(it.first);
         if (strcmp(asset.c_str(), name) == NULL)
         {
-            return &it.second;
+            return &it.second.e.exportSetting;
         }
     }
 
@@ -37,31 +36,10 @@ static void AssetSettings_ReadLine(ImGuiContext* const ctx, ImGuiSettingsHandler
 
     if (entry)
     {
-        AssetTypeBinding_t* const typeBinding = static_cast<AssetTypeBinding_t*>(entry);
+        int* const exportSetting = static_cast<int*>(entry);
 
         int i;
-        ImGuiReadSetting("Setting=%i", typeBinding->e.exportSetting, i, int);
-        ImGuiReadSetting("LoadAssetType=%i", typeBinding->_loadAssetType, i, int);
-
-        if (auto assetSettings = g_rsxSettings.assetSettings.find(typeBinding->type); assetSettings != g_rsxSettings.assetSettings.end())
-        {
-            for (auto& setting : assetSettings->second)
-            {
-                switch (setting.valueType)
-                {
-                case UISettingType_e::TYPE_BOOL:
-                    ImGuiReadSetting(setting.cfgName, setting.rawValue.boolVal, i, int);
-                    break;
-                case UISettingType_e::TYPE_U32:
-                    ImGuiReadSetting(setting.cfgName, setting.rawValue.u32Val, i, uint32_t);
-                    break;
-                case UISettingType_e::TYPE_FLOAT32:
-                    ImGuiReadSetting(setting.cfgName, setting.rawValue.flVal, i, float);
-                    break;
-
-                }
-            }
-        }
+        ImGuiReadSetting("Setting=%i", *exportSetting, i, int);
     }
 }
 
@@ -74,18 +52,6 @@ static void AssetSettings_WriteAll(ImGuiContext* const ctx, ImGuiSettingsHandler
     {
         buf->appendf("[%s][%s]\n", handler->TypeName, fourCCToString(it.first).c_str());
         buf->appendf("Setting=%d\n", it.second.e.exportSetting);
-        buf->appendf("LoadAssetType=%d\n", it.second._loadAssetType);
-
-        if (auto assetSettings = g_rsxSettings.assetSettings.find(it.first); assetSettings != g_rsxSettings.assetSettings.end())
-        {
-            for (auto& setting : assetSettings->second)
-            {
-                // this is bad, but the compiler won't throw a warning because of mismatched fmt vars to types since it's a runtime
-                // format string
-                buf->appendf(setting.cfgName, setting.rawValue.u32Val);
-            }
-        }
-
         buf->append("\n");
     }
 }
@@ -113,7 +79,10 @@ static void UtilSettings_ReadLine(ImGuiContext* const ctx, ImGuiSettingsHandler*
         ImGuiReadSetting("ExportThreads=%u", cfg->exportThreadCount, i, uint32_t);
         ImGuiReadSetting("ParseThreads=%u", cfg->parseThreadCount, i, uint32_t);
         ImGuiReadSetting("CompressionLevel=%u", cfg->compressionLevel, i, uint32_t);
-        ImGuiReadSetting("CheckForUpdates=%u", cfg->checkForUpdates, i, int);
+
+        int checkUpdates = 0;
+        if (sscanf_s(line, "CheckForUpdatesOnStartup=%d", &checkUpdates) == 1)
+            cfg->checkForUpdatesOnStartup = checkUpdates != 0;
     }
 }
 
@@ -126,7 +95,63 @@ static void UtilSettings_WriteAll(ImGuiContext* const ctx, ImGuiSettingsHandler*
     buf->appendf("ExportThreads=%u\n", UtilsConfig->exportThreadCount);
     buf->appendf("ParseThreads=%u\n", UtilsConfig->parseThreadCount);
     buf->appendf("CompressionLevel=%u\n", UtilsConfig->compressionLevel);
-    buf->appendf("CheckForUpdates=%i\n", UtilsConfig->checkForUpdates ? 1 : 0);
+    buf->appendf("CheckForUpdatesOnStartup=%d\n", UtilsConfig->checkForUpdatesOnStartup ? 1 : 0);
+    buf->append("\n");
+}
+
+// theme settings
+static void* ThemeSettings_ReadOpen(ImGuiContext* const ctx, ImGuiSettingsHandler* const handler, const char* const name)
+{
+    UNUSED(handler);
+    UNUSED(ctx);
+
+    if (strcmp(name, "theme") == 0)
+        return &g_pImGuiHandler->theme;
+    return nullptr;
+}
+
+static void ThemeSettings_ReadLine(ImGuiContext* const ctx, ImGuiSettingsHandler* const handler, void* const entry, const char* const line)
+{
+    UNUSED(handler);
+    UNUSED(ctx);
+
+    if (entry)
+    {
+        ImGuiHandler::ThemeSettings_t* const theme = static_cast<ImGuiHandler::ThemeSettings_t*>(entry);
+
+        // Helper to read ImVec4
+        auto readColor = [line](const char* label, ImVec4& color) {
+            float r, g, b, a;
+            if (sscanf_s(line, label, &r, &g, &b, &a) == 4) {
+                color.x = r; color.y = g; color.z = b; color.w = a;
+            }
+        };
+
+        readColor("AccentColor=%f,%f,%f,%f", theme->accentColor);
+        readColor("AccentHovered=%f,%f,%f,%f", theme->accentHovered);
+        readColor("AccentActive=%f,%f,%f,%f", theme->accentActive);
+        readColor("WindowBg=%f,%f,%f,%f", theme->windowBg);
+        readColor("HeaderBg=%f,%f,%f,%f", theme->headerBg);
+        readColor("TitleBg=%f,%f,%f,%f", theme->titleBg);
+        readColor("TextRegular=%f,%f,%f,%f", theme->textRegular);
+    }
+}
+
+static void ThemeSettings_WriteAll(ImGuiContext* const ctx, ImGuiSettingsHandler* handler, ImGuiTextBuffer* const buf)
+{
+    UNUSED(ctx);
+
+    buf->reserve(buf->size() + 256);
+    buf->appendf("[%s][theme]\n", handler->TypeName);
+
+    const auto& t = g_pImGuiHandler->theme;
+    buf->appendf("AccentColor=%.4f,%.4f,%.4f,%.4f\n", t.accentColor.x, t.accentColor.y, t.accentColor.z, t.accentColor.w);
+    buf->appendf("AccentHovered=%.4f,%.4f,%.4f,%.4f\n", t.accentHovered.x, t.accentHovered.y, t.accentHovered.z, t.accentHovered.w);
+    buf->appendf("AccentActive=%.4f,%.4f,%.4f,%.4f\n", t.accentActive.x, t.accentActive.y, t.accentActive.z, t.accentActive.w);
+    buf->appendf("WindowBg=%.4f,%.4f,%.4f,%.4f\n", t.windowBg.x, t.windowBg.y, t.windowBg.z, t.windowBg.w);
+    buf->appendf("HeaderBg=%.4f,%.4f,%.4f,%.4f\n", t.headerBg.x, t.headerBg.y, t.headerBg.z, t.headerBg.w);
+    buf->appendf("TitleBg=%.4f,%.4f,%.4f,%.4f\n", t.titleBg.x, t.titleBg.y, t.titleBg.z, t.titleBg.w);
+    buf->appendf("TextRegular=%.4f,%.4f,%.4f,%.4f\n", t.textRegular.x, t.textRegular.y, t.textRegular.z, t.textRegular.w);
     buf->append("\n");
 }
 
@@ -137,7 +162,7 @@ static void* ExportSettings_ReadOpen(ImGuiContext* const ctx, ImGuiSettingsHandl
     UNUSED(ctx);
     UNUSED(name);
 
-    return &g_rsxSettings;
+    return &g_ExportSettings;
 }
 
 static void ExportSettings_ReadLine(ImGuiContext* const ctx, ImGuiSettingsHandler* const handler, void* const entry, const char* const line)
@@ -147,11 +172,12 @@ static void ExportSettings_ReadLine(ImGuiContext* const ctx, ImGuiSettingsHandle
 
     if (entry)
     {
-        RSXSettings_t* const settings = static_cast<RSXSettings_t*>(entry);
+        ExportSettings_t* const settings = static_cast<ExportSettings_t*>(entry);
 
         int i;
         ImGuiReadSetting("ExportPathsFull=%i",              settings->exportPathsFull, i, int);
         ImGuiReadSetting("ExportAssetDeps=%i",              settings->exportAssetDeps, i, int);
+        ImGuiReadSetting("ExportAssetDependents=%i",        settings->exportAssetDependents, i, int);
         ImGuiReadSetting("DisableCacheNames=%i",            settings->disableCachedNames, i, int);
 
 
@@ -166,11 +192,6 @@ static void ExportSettings_ReadLine(ImGuiContext* const ctx, ImGuiSettingsHandle
         ImGuiReadSetting("ExportModelSkin=%i",              settings->exportModelSkin, i, int);
         ImGuiReadSetting("ExportTruncatedMaterials=%i",     settings->exportModelMatsTruncated, i, int);
         ImGuiReadSetting("ExportQCIFiles=%i",               settings->exportQCIFiles, i, int);
-
-        ImGuiReadSetting("BridgePortNum=%i", settings->bridgePort, i, uint16_t);
-
-        //ImGuiReadSetting("UseOrigScriptExportExtensions=%i", settings->useOrigScriptExportExtensions, i, int);
-        settings->useOrigScriptExportExtensions = true; // cant decide if i wanna keep this setting or not so let's just force it to true for now
     }
 }
 
@@ -178,28 +199,25 @@ static void ExportSettings_WriteAll(ImGuiContext* const ctx, ImGuiSettingsHandle
 {
     UNUSED(ctx);
 
-    buf->reserve(buf->size() + (48 * 12));
+    buf->reserve(buf->size() + (48 * 11));
     buf->appendf("[%s][general]\n", handler->TypeName);
     
-    buf->appendf("ExportPathsFull=%i\n",            g_rsxSettings.exportPathsFull);
-    buf->appendf("ExportAssetDeps=%i\n",            g_rsxSettings.exportAssetDeps);
-    buf->appendf("DisableCacheNames=%i\n",          g_rsxSettings.disableCachedNames);
+    buf->appendf("ExportPathsFull=%i\n",            g_ExportSettings.exportPathsFull);
+    buf->appendf("ExportAssetDeps=%i\n",            g_ExportSettings.exportAssetDeps);
+    buf->appendf("ExportAssetDependents=%i\n",      g_ExportSettings.exportAssetDependents);
+    buf->appendf("DisableCacheNames=%i\n",          g_ExportSettings.disableCachedNames);
 
-    buf->appendf("ExportTextureNameSetting=%u\n",   g_rsxSettings.exportTextureNameSetting);
-    buf->appendf("ExportNormalRecalcSetting=%u\n",  g_rsxSettings.exportNormalRecalcSetting);
-    buf->appendf("ExportMaterialTextures=%i\n",     g_rsxSettings.exportMaterialTextures);
+    buf->appendf("ExportTextureNameSetting=%u\n",   g_ExportSettings.exportTextureNameSetting);
+    buf->appendf("ExportNormalRecalcSetting=%u\n",  g_ExportSettings.exportNormalRecalcSetting);
+    buf->appendf("ExportMaterialTextures=%i\n",     g_ExportSettings.exportMaterialTextures);
 
-    buf->appendf("QCMajorVersion=%u\n",             g_rsxSettings.qcMajorVersion);
-    buf->appendf("QCMinorVersion=%u\n",             g_rsxSettings.qcMinorVersion);
+    buf->appendf("QCMajorVersion=%u\n",             g_ExportSettings.qcMajorVersion);
+    buf->appendf("QCMinorVersion=%u\n",             g_ExportSettings.qcMinorVersion);
 
-    buf->appendf("ExportRigSequences=%i\n",         g_rsxSettings.exportRigSequences);
-    buf->appendf("ExportModelSkin=%i\n",            g_rsxSettings.exportModelSkin);
-    buf->appendf("ExportTruncatedMaterials=%i\n",   g_rsxSettings.exportModelMatsTruncated);
-    buf->appendf("ExportQCIFiles=%i\n",             g_rsxSettings.exportQCIFiles);
-
-    buf->appendf("UseOrigScriptExportExtensions=%i\n", g_rsxSettings.useOrigScriptExportExtensions);
-
-    buf->appendf("BridgePortNum=%i\n", g_rsxSettings.bridgePort);
+    buf->appendf("ExportRigSequences=%i\n",         g_ExportSettings.exportRigSequences);
+    buf->appendf("ExportModelSkin=%i\n",            g_ExportSettings.exportModelSkin);
+    buf->appendf("ExportTruncatedMaterials=%i\n",   g_ExportSettings.exportModelMatsTruncated);
+    buf->appendf("ExportQCIFiles=%i\n",             g_ExportSettings.exportQCIFiles);
 
     buf->appendf("\n");
 }
@@ -235,21 +253,21 @@ static void PreviewSettings_WriteAll(ImGuiContext* const ctx, ImGuiSettingsHandl
 
     buf->reserve(buf->size() + 128);
     buf->appendf("[%s][general]\n", handler->TypeName);
-    
+
     buf->appendf("PreviewCullDistance=%f\n",    g_PreviewSettings.previewCullDistance);
     buf->appendf("PreviewMovementSpeed=%f\n",   g_PreviewSettings.previewMovementSpeed);
 
     buf->appendf("\n");
 }
 
-bool ImGuiCustomTextFilter::Draw(const char* label, const char* hint, float width)
+bool ImGuiCustomTextFilter::Draw(const char* label, float width)
 {
     if (width != 0.0f)
     {
         ImGui::SetNextItemWidth(width);
     }
 
-    const bool valChanged = ImGui::InputTextWithHint(label, hint, &inputBuf);
+    const bool valChanged = ImGui::InputText(label, &inputBuf);
     if (valChanged)
     {
         Build();
@@ -394,10 +412,19 @@ void ImGuiHandler::SetupHandler()
     previewSettingsHandler.ReadLineFn = PreviewSettings_ReadLine;
     previewSettingsHandler.WriteAllFn = PreviewSettings_WriteAll;
 
+    // theme/appearance settings
+    ImGuiSettingsHandler themeSettingsHandler = {};
+    themeSettingsHandler.TypeName = "ThemeSettings";
+    themeSettingsHandler.TypeHash = ImHashStr("ThemeSettings");
+    themeSettingsHandler.ReadOpenFn = ThemeSettings_ReadOpen;
+    themeSettingsHandler.ReadLineFn = ThemeSettings_ReadLine;
+    themeSettingsHandler.WriteAllFn = ThemeSettings_WriteAll;
+
     ImGui::AddSettingsHandler(&assetSettingsHandler);
     ImGui::AddSettingsHandler(&utilSettingsHandler);
     ImGui::AddSettingsHandler(&exportSettingsHandler);
     ImGui::AddSettingsHandler(&previewSettingsHandler);
+    ImGui::AddSettingsHandler(&themeSettingsHandler);
     ImGui::LoadIniSettingsFromDisk(io.IniFilename);
 }
 
@@ -411,7 +438,7 @@ void ImGuiHandler::SetStyle()
     config.OversampleV = 2;
 
     this->defaultFont = io.Fonts->AddFontFromMemoryCompressedTTF(SourceSansProRegular_compressed_data, sizeof(SourceSansProRegular_compressed_data), 18.f, NULL, io.Fonts->GetGlyphRangesDefault());
-    
+
     char* systemRootPath = nullptr;
     size_t systemRootPathLen = 0;
     assertm(_dupenv_s(&systemRootPath, &systemRootPathLen, "SYSTEMROOT") == 0, "couldn't get systemroot env var");
@@ -420,144 +447,154 @@ void ImGuiHandler::SetStyle()
     io.Fonts->AddFontFromFileTTF((fontsDir + "simsun.ttc").c_str(), 18.f, &config, io.Fonts->GetGlyphRangesChineseFull());
     io.Fonts->AddFontFromFileTTF((fontsDir + "malgun.ttf").c_str(), 18.f, &config, io.Fonts->GetGlyphRangesJapanese());
     io.Fonts->AddFontFromFileTTF((fontsDir + "micross.ttf").c_str(), 18.f, &config, io.Fonts->GetGlyphRangesCyrillic());
-    io.Fonts->AddFontFromMemoryCompressedBase85TTF(Codicons_compressed_data, 14.f, &config);
 
-    ImGuiStyle& style = ImGui::GetStyle();
-
-    style.WindowMenuButtonPosition = ImGuiDir_None;
-    ImVec4* colors = style.Colors;
-
-    // Catppuccin Mocha Palette
-    // --------------------------------------------------------
-    const ImVec4 base = ImVec4(0.117f, 0.117f, 0.172f, 1.0f); // #1e1e2e
-    const ImVec4 mantle = ImVec4(0.109f, 0.109f, 0.156f, 1.0f); // #181825
-    const ImVec4 surface0 = ImVec4(0.200f, 0.207f, 0.286f, 1.0f); // #313244
-    const ImVec4 surface1 = ImVec4(0.247f, 0.254f, 0.337f, 1.0f); // #3f4056
-    const ImVec4 surface2 = ImVec4(0.290f, 0.301f, 0.388f, 1.0f); // #4a4d63
-    const ImVec4 overlay0 = ImVec4(0.396f, 0.403f, 0.486f, 1.0f); // #65677c
-    const ImVec4 overlay2 = ImVec4(0.576f, 0.584f, 0.654f, 1.0f); // #9399b2
-    const ImVec4 text = ImVec4(0.803f, 0.815f, 0.878f, 1.0f); // #cdd6f4
-    const ImVec4 subtext0 = ImVec4(0.639f, 0.658f, 0.764f, 1.0f); // #a3a8c3
-    const ImVec4 mauve = ImVec4(0.796f, 0.698f, 0.972f, 1.0f); // #cba6f7
-    const ImVec4 peach = ImVec4(0.980f, 0.709f, 0.572f, 1.0f); // #fab387
-    const ImVec4 yellow = ImVec4(0.980f, 0.913f, 0.596f, 1.0f); // #f9e2af
-    const ImVec4 green = ImVec4(0.650f, 0.890f, 0.631f, 1.0f); // #a6e3a1
-    const ImVec4 teal = ImVec4(0.580f, 0.886f, 0.819f, 1.0f); // #94e2d5
-    const ImVec4 darkTeal = ImVec4(0.157f, 0.353f, 0.282f, 1.0f); // #285a48
-    const ImVec4 sapphire = ImVec4(0.458f, 0.784f, 0.878f, 1.0f); // #74c7ec
-    const ImVec4 blue = ImVec4(0.533f, 0.698f, 0.976f, 1.0f); // #89b4fa
-    const ImVec4 lavender = ImVec4(0.709f, 0.764f, 0.980f, 1.0f); // #b4befe
-
-    // Main window and backgrounds
-    colors[ImGuiCol_WindowBg] = base;
-    colors[ImGuiCol_ChildBg] = base;
-    colors[ImGuiCol_PopupBg] = surface0;
-    colors[ImGuiCol_Border] = surface1;
-    colors[ImGuiCol_BorderShadow] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-    colors[ImGuiCol_FrameBg] = surface0;
-    colors[ImGuiCol_FrameBgHovered] = surface1;
-    colors[ImGuiCol_FrameBgActive] = surface2;
-    colors[ImGuiCol_TitleBg] = mantle;
-    colors[ImGuiCol_TitleBgActive] = surface0;
-    colors[ImGuiCol_TitleBgCollapsed] = mantle;
-    colors[ImGuiCol_MenuBarBg] = mantle;
-    colors[ImGuiCol_ScrollbarBg] = surface0;
-    colors[ImGuiCol_ScrollbarGrab] = surface2;
-    colors[ImGuiCol_ScrollbarGrabHovered] = overlay0;
-    colors[ImGuiCol_ScrollbarGrabActive] = overlay2;
-    colors[ImGuiCol_CheckMark] = green;
-    colors[ImGuiCol_SliderGrab] = sapphire;
-    colors[ImGuiCol_SliderGrabActive] = blue;
-    colors[ImGuiCol_Button] = surface0;
-    colors[ImGuiCol_ButtonHovered] = surface1;
-    colors[ImGuiCol_ButtonActive] = surface2;
-    colors[ImGuiCol_Header] = surface0;
-    colors[ImGuiCol_HeaderHovered] = surface1;
-    colors[ImGuiCol_HeaderActive] = surface2;
-    colors[ImGuiCol_Separator] = surface1;
-    colors[ImGuiCol_SeparatorHovered] = mauve;
-    colors[ImGuiCol_SeparatorActive] = mauve;
-    colors[ImGuiCol_ResizeGrip] = surface2;
-    colors[ImGuiCol_ResizeGripHovered] = mauve;
-    colors[ImGuiCol_ResizeGripActive] = mauve;
-    colors[ImGuiCol_Tab] = surface0;
-    colors[ImGuiCol_TabHovered] = surface2;
-    colors[ImGuiCol_TabActive] = surface1;
-    colors[ImGuiCol_TabUnfocused] = surface0;
-    colors[ImGuiCol_TabUnfocusedActive] = surface1;
-    colors[ImGuiCol_DockingPreview] = sapphire;
-    colors[ImGuiCol_DockingEmptyBg] = base;
-    colors[ImGuiCol_PlotLines] = blue;
-    colors[ImGuiCol_PlotLinesHovered] = peach;
-    colors[ImGuiCol_PlotHistogram] = darkTeal;
-    colors[ImGuiCol_PlotHistogramHovered] = green;
-    colors[ImGuiCol_TableHeaderBg] = surface0;
-    colors[ImGuiCol_TableBorderStrong] = surface1;
-    colors[ImGuiCol_TableBorderLight] = surface0;
-    colors[ImGuiCol_TableRowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-    colors[ImGuiCol_TableRowBgAlt] = ImVec4(1.0f, 1.0f, 1.0f, 0.005f);
-    colors[ImGuiCol_TextSelectedBg] = surface2;
-    colors[ImGuiCol_DragDropTarget] = yellow;
-    colors[ImGuiCol_NavHighlight] = lavender;
-    colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.0f, 1.0f, 1.0f, 0.7f);
-    colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.8f, 0.8f, 0.8f, 0.2f);
-    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.35f);
-    colors[ImGuiCol_Text] = text;
-    colors[ImGuiCol_TextDisabled] = subtext0;
-
-    // Rounded corners
-    style.WindowRounding = 6.0f;
-    style.ChildRounding = 6.0f;
-    style.FrameRounding = 4.0f;
-    style.PopupRounding = 4.0f;
-    style.ScrollbarRounding = 9.0f;
-    style.GrabRounding = 4.0f;
-    style.TabRounding = 4.0f;
-
-    // Padding and spacing
-    style.WindowPadding = ImVec2(8.0f, 8.0f);
-    style.FramePadding = ImVec2(5.0f, 3.0f);
-    style.ItemSpacing = ImVec2(8.0f, 4.0f);
-    style.ItemInnerSpacing = ImVec2(4.0f, 4.0f);
-    style.IndentSpacing = 21.0f;
-    style.ScrollbarSize = 14.0f;
-    style.GrabMinSize = 10.0f;
-
-    // Borders
-    style.WindowBorderSize = 1.0f;
-    style.ChildBorderSize = 1.0f;
-    style.PopupBorderSize = 1.0f;
-    style.FrameBorderSize = 0.0f;
-    style.TabBorderSize = 0.0f;
+    ApplyTheme();
 }
 
-namespace ImGuiExt {
-    void HelpMarker(const char* const desc)
-    {
-        assert(desc);
-        ImGui::TextDisabled("(?)");
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort) && ImGui::BeginTooltip())
-        {
-            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-            ImGui::TextUnformatted(desc);
-            ImGui::PopTextWrapPos();
-            ImGui::EndTooltip();
-        }
-    }
+void ImGuiHandler::ApplyTheme()
+{
+    ImGuiStyle& style = ImGui::GetStyle();
+    ImVec4* colors = style.Colors;
 
-    void Tooltip(const char* const text)
-    {
-        assert(text);
+    const ThemeSettings_t& t = theme;
 
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort) && ImGui::BeginTooltip())
+    // Helper macro to darken a color
+    #define DARKEN(c, amt) ImVec4( \
+        (std::max)((c).x - (amt), 0.0f), \
+        (std::max)((c).y - (amt), 0.0f), \
+        (std::max)((c).z - (amt), 0.0f), \
+        (c).w)
+
+    colors[ImGuiCol_Text] = t.textRegular;
+    colors[ImGuiCol_TextDisabled] = ImVec4(t.textRegular.x * 0.6f, t.textRegular.y * 0.6f, t.textRegular.z * 0.6f, t.textRegular.w * 0.6f);
+    colors[ImGuiCol_TextSelectedBg] = ImVec4(t.accentColor.x * 0.3f, t.accentColor.y * 0.3f, t.accentColor.z * 0.3f, 0.5f);
+    colors[ImGuiCol_WindowBg] = t.windowBg;
+    colors[ImGuiCol_ChildBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+    colors[ImGuiCol_PopupBg] = ImVec4(t.windowBg.x * 1.1f, t.windowBg.y * 1.1f, t.windowBg.z * 1.1f, 1.0f);
+    colors[ImGuiCol_Border] = DARKEN(t.accentColor, 0.3f);
+    colors[ImGuiCol_BorderShadow] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+    colors[ImGuiCol_FrameBg] = DARKEN(t.windowBg, 0.1f);
+    colors[ImGuiCol_FrameBgHovered] = ImVec4(t.windowBg.x - 0.05f, t.windowBg.y - 0.05f, t.windowBg.z - 0.05f, 1.0f);
+    colors[ImGuiCol_FrameBgActive] = t.accentColor;
+    colors[ImGuiCol_TitleBg] = t.titleBg;
+    colors[ImGuiCol_TitleBgActive] = t.accentActive;
+    colors[ImGuiCol_TitleBgCollapsed] = DARKEN(t.titleBg, 0.2f);
+    colors[ImGuiCol_MenuBarBg] = DARKEN(t.windowBg, 0.1f);
+    colors[ImGuiCol_ScrollbarBg] = DARKEN(t.windowBg, 0.15f);
+    colors[ImGuiCol_ScrollbarGrab] = t.accentColor;
+    colors[ImGuiCol_ScrollbarGrabHovered] = t.accentHovered;
+    colors[ImGuiCol_ScrollbarGrabActive] = t.accentActive;
+    colors[ImGuiCol_CheckMark] = t.accentColor;
+    colors[ImGuiCol_SliderGrab] = t.accentColor;
+    colors[ImGuiCol_SliderGrabActive] = t.accentActive;
+    colors[ImGuiCol_Button] = t.accentColor;
+    colors[ImGuiCol_ButtonHovered] = t.accentHovered;
+    colors[ImGuiCol_ButtonActive] = t.accentActive;
+    colors[ImGuiCol_Header] = t.headerBg;
+    colors[ImGuiCol_HeaderHovered] = t.accentHovered;
+    colors[ImGuiCol_HeaderActive] = t.accentActive;
+    colors[ImGuiCol_Separator] = DARKEN(t.accentColor, 0.3f);
+    colors[ImGuiCol_SeparatorHovered] = t.accentHovered;
+    colors[ImGuiCol_SeparatorActive] = t.accentActive;
+    colors[ImGuiCol_ResizeGrip] = t.accentColor;
+    colors[ImGuiCol_ResizeGripHovered] = t.accentHovered;
+    colors[ImGuiCol_ResizeGripActive] = t.accentActive;
+    colors[ImGuiCol_Tab] = t.headerBg;
+    colors[ImGuiCol_TabHovered] = t.accentHovered;
+    colors[ImGuiCol_TabActive] = t.accentActive;
+    colors[ImGuiCol_TabUnfocused] = DARKEN(t.headerBg, 0.2f);
+    colors[ImGuiCol_TabUnfocusedActive] = DARKEN(t.accentColor, 0.1f);
+    colors[ImGuiCol_PlotLines] = t.accentColor;
+    colors[ImGuiCol_PlotLinesHovered] = t.accentHovered;
+    colors[ImGuiCol_PlotHistogram] = t.accentColor;
+    colors[ImGuiCol_PlotHistogramHovered] = t.accentHovered;
+    colors[ImGuiCol_TableHeaderBg] = DARKEN(t.windowBg, 0.15f);
+    colors[ImGuiCol_TableBorderStrong] = t.accentColor;
+    colors[ImGuiCol_TableBorderLight] = DARKEN(t.accentColor, 0.2f);
+    colors[ImGuiCol_TableRowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+    colors[ImGuiCol_TableRowBgAlt] = DARKEN(t.windowBg, 0.1f);
+    colors[ImGuiCol_DragDropTarget] = t.accentColor;
+    colors[ImGuiCol_NavHighlight] = t.accentColor;
+    colors[ImGuiCol_NavWindowingHighlight] = t.accentColor;
+    colors[ImGuiCol_NavWindowingDimBg] = ImVec4(t.windowBg.x * 0.5f, t.windowBg.y * 0.5f, t.windowBg.z * 0.5f, 0.6f);
+    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(t.windowBg.x * 0.4f, t.windowBg.y * 0.4f, t.windowBg.z * 0.4f, 0.7f);
+
+    // Style rounding and sizes
+    style.WindowBorderSize = 1.0f;
+    style.FrameBorderSize = 0.0f;
+    style.ChildBorderSize = 0.0f;
+    style.PopupBorderSize = 1.0f;
+    style.TabBorderSize = 1.0f;
+
+    style.WindowRounding = 4.0f;
+    style.FrameRounding = 1.0f;
+    style.ChildRounding = 1.0f;
+    style.PopupRounding = 3.0f;
+    style.TabRounding = 1.0f;
+    style.ScrollbarRounding = 3.0f;
+}
+
+void ImGuiHandler::ShowThemeEditor()
+{
+    if (!theme.showThemeEditor)
+        return;
+
+    if (ImGui::Begin("Theme Editor", &theme.showThemeEditor))
+    {
+        ImGui::Text("Customize the appearance of RSX");
+        ImGui::Separator();
+
+        bool colorChanged = false;
+
+        ImGui::Text("Accent Colors");
+        colorChanged |= ImGui::ColorEdit4("Primary", &theme.accentColor.x);
+        colorChanged |= ImGui::ColorEdit4("Hovered", &theme.accentHovered.x);
+        colorChanged |= ImGui::ColorEdit4("Active", &theme.accentActive.x);
+
+        ImGui::Separator();
+        ImGui::Text("Background Colors");
+        colorChanged |= ImGui::ColorEdit4("Window/Popup", &theme.windowBg.x);
+        colorChanged |= ImGui::ColorEdit4("Header/Title", &theme.headerBg.x);
+        colorChanged |= ImGui::ColorEdit4("Title Bar", &theme.titleBg.x);
+
+        ImGui::Separator();
+        ImGui::Text("Text");
+        colorChanged |= ImGui::ColorEdit4("Regular", &theme.textRegular.x);
+
+        if (colorChanged)
+            ApplyTheme();
+
+        ImGui::Separator();
+        if (ImGui::Button("Reset to Default"))
         {
-            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-            ImGui::TextUnformatted(text);
-            ImGui::PopTextWrapPos();
-            ImGui::EndTooltip();
+            theme.accentColor = ImVec4(0.45f, 0.30f, 0.70f, 1.00f);
+            theme.accentHovered = ImVec4(0.50f, 0.35f, 0.80f, 1.00f);
+            theme.accentActive = ImVec4(0.55f, 0.40f, 0.85f, 1.00f);
+            theme.windowBg = ImVec4(0.12f, 0.10f, 0.15f, 1.00f);
+            theme.headerBg = ImVec4(0.35f, 0.25f, 0.55f, 0.60f);
+            theme.titleBg = ImVec4(0.35f, 0.25f, 0.55f, 1.00f);
+            theme.textRegular = ImVec4(0.85f, 0.85f, 0.90f, 1.00f);
+            ApplyTheme();
         }
+
+        ImGui::Separator();
+        ImGui::TextDisabled("Theme changes are saved automatically");
     }
-};
+    ImGui::End();
+}
+
+void ImGuiHandler::HelpMarker(const char* const desc)
+{
+    assert(desc);
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort) && ImGui::BeginTooltip())
+    {
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+        ImGui::TextUnformatted(desc);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
 
 const ProgressBarEvent_t* const ImGuiHandler::AddProgressBarEvent(const char* const eventName, const uint32_t eventNum, std::atomic<uint32_t>* const remainingEvents, const bool isInverted)
 {
@@ -630,10 +667,7 @@ void ImGuiHandler::HandleProgressBar()
             ImGui::SetNextWindowSize(ImVec2(0, 0));
             ImGui::SetNextWindowPos(viewportCenter, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-            if (!ImGui::Begin(event->eventName, nullptr, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoResize
-                | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings
-                | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollWithMouse
-                | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse))
+            if (!ImGui::Begin(event->eventName, nullptr, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollWithMouse))
                 continue;
         }
         else
@@ -647,7 +681,7 @@ void ImGuiHandler::HandleProgressBar()
 
         const uint32_t leftOverEvents = event->isInverted ? remainingEvents : numEvents - remainingEvents;
         const float progressFraction = std::clamp(static_cast<float>(leftOverEvents) / static_cast<float>(numEvents), 0.0f, 1.0f);
-        ImGuiExt::ProgressBarCentered(progressFraction, ImVec2(485, 48), std::format("{}/{}", leftOverEvents, numEvents).c_str(), event);
+        ProgressBarCentered(progressFraction, ImVec2(485, 48), std::format("{}/{}", leftOverEvents, numEvents).c_str(), event);
 
         foundTopLevelBar = true;
     }
@@ -657,9 +691,9 @@ void ImGuiHandler::HandleProgressBar()
 }
 
 // size_arg (for each axis) < 0.0f: align to end, 0.0f: auto, > 0.0f: specified size
-void ImGuiExt::ProgressBarCentered(float fraction, const ImVec2& size_arg, const char* overlay, ProgressBarEvent_t* event)
+void ImGuiHandler::ProgressBarCentered(float fraction, const ImVec2& size_arg, const char* overlay, ProgressBarEvent_t* event)
 {
-    if (g_pImGuiHandler->NoImGui())
+    if (g_pImGuiHandler->noImGui)
         return;
 
     using namespace ImGui;
@@ -697,7 +731,7 @@ void ImGuiExt::ProgressBarCentered(float fraction, const ImVec2& size_arg, const
     if (overlay_size.x > 0.0f)
         RenderTextClipped(ImVec2(bb.Min.x, bb.Min.y), bb.Max, overlay, NULL, &overlay_size, ImVec2(0.5f, 0.5f), &bb);
 
-    if (event && event->fnCancelEvents)
+    if (event->fnCancelEvents)
     {
         // https://github.com/ocornut/imgui/issues/4157
         float cancelButtonWidth = ImGui::CalcTextSize("Cancel").x + style.FramePadding.x * 2.f;
@@ -707,125 +741,6 @@ void ImGuiExt::ProgressBarCentered(float fraction, const ImVec2& size_arg, const
         if (ImGui::Button("Cancel"))
             event->fnCancelEvents(event);
     }
-}
-
-bool ImGuiExt::Timeline(const char* strId, float currentTime, float endTime, size_t endFrame, const std::vector<AudioMarker_s>& markers, const ImVec2& size_arg, size_t* o_seekFrame)
-{
-    if (g_pImGuiHandler->NoImGui())
-        return false;
-
-    using namespace ImGui;
-
-    ImGuiWindow* window = GetCurrentWindow();
-    if (window->SkipItems)
-        return false;
-
-    ImGuiContext& g = *GImGui;
-    const ImGuiStyle& style = g.Style;
-
-    const ImGuiID id = window->GetID(strId);
-
-    const ImVec2 pos = window->DC.CursorPos;
-    const ImVec2 size = CalcItemSize(size_arg, CalcItemWidth(), g.FontSize + style.FramePadding.y * 2.0f);
-    ImRect bb(pos, pos + size);
-    ItemSize(size, style.FramePadding.y);
-    if (!ItemAdd(bb, 0))
-        return false;
-
-    bool timelineHovered;
-    bool held;
-    ButtonBehavior(bb, id, &timelineHovered, &held);
-
-    // Render
-    RenderFrame(bb.Min, bb.Max, GetColorU32(ImGuiCol_FrameBg), true, style.FrameRounding);
-    bb.Expand(ImVec2(-style.FrameBorderSize, -style.FrameBorderSize));
-
-    const float fraction = endTime != 0.f ? ImSaturate(currentTime / endTime) : 0.f;
-    RenderRectFilledRangeH(window->DrawList, bb, GetColorU32(ImGuiCol_PlotHistogram), 0.0f, fraction, style.FrameRounding);
-
-    constexpr float markerLineThickness = 1.5f;
-    constexpr float markerArrowSize = 5.f;
-
-    size_t hoveredMarker = UINT64_MAX;
-    float shortestDistanceToMarker = 5.f; // max distance to a marker is 5px
-
-    if (endFrame != 0)
-    {
-        if (timelineHovered)
-        {
-            const float mouseX = g.IO.MousePos.x;
-
-            size_t i = 0;
-
-            // Precalculate which marker is hovered
-            for (auto& marker : markers)
-            {
-                const float markerFrac = static_cast<float>(marker.framePosition) / endFrame;
-                const float markerX = ImLerp(bb.Min.x, bb.Max.x, ImSaturate(markerFrac));
-                const float distance = ImFabs(mouseX - (markerX + (markerLineThickness/2.f)));
-
-                if (distance < shortestDistanceToMarker)
-                {
-                    hoveredMarker = i;
-                    shortestDistanceToMarker = distance;
-                }
-
-                i++;
-            }
-        }
-        
-        size_t i = 0;
-
-        window->DrawList->PushClipRect(bb.Min, bb.Max, true);
-        for (auto& marker : markers)
-        {
-            const float markerFrac = static_cast<float>(marker.framePosition) / endFrame;
-
-            // lerping or larping
-            const float markerX = ImLerp(bb.Min.x, bb.Max.x, ImSaturate(markerFrac));
-
-            const ImU32 markerColour = hoveredMarker == i ? GetColorU32(ImGuiCol_PlotLinesHovered) : GetColorU32(ImGuiCol_PlotLines);
-
-            // Adjust the marker colour based on if we have passed this marker or not
-            const ImU32 adjustedColour = fraction > markerFrac ? (markerColour & 0xFFFFFF) | 0x4f000000 : markerColour;
-
-            // Line
-            window->DrawList->AddLine(ImVec2(markerX, bb.Min.y), ImVec2(markerX, bb.Max.y), adjustedColour, markerLineThickness);
-        
-            // Arrow
-            window->DrawList->AddTriangleFilled(
-                ImVec2(markerX - (markerArrowSize / 2.f), bb.Min.y),
-                ImVec2(markerX + (markerArrowSize / 2.f) + (markerLineThickness / 2.f), bb.Min.y),
-                ImVec2(markerX + (markerLineThickness / 2.f), bb.Min.y + markerArrowSize),
-                adjustedColour
-            );
-        
-            i++;
-        }
-        window->DrawList->PopClipRect();
-    }
-
-    // If the timeline is clicked, jump to the frame at the position that was clicked
-    if (held)
-    {
-        size_t seekFrame = 0;
-        if (hoveredMarker != UINT64_MAX)
-            seekFrame = markers.at(hoveredMarker).framePosition;
-        else
-        {
-            const float mouseX = g.IO.MousePos.x;
-            const float distance = mouseX - bb.Min.x;
-
-            const float seekFraction = distance / size.x;
-
-            seekFrame = static_cast<size_t>(seekFraction * endFrame);
-        }
-
-        *o_seekFrame = seekFrame;
-    }
-
-
-    return held;
 }
 
 ImGuiHandler::ImGuiHandler()
@@ -838,8 +753,6 @@ ImGuiHandler::ImGuiHandler()
 
     // standard config setting for compression
     cfg.compressionLevel = eCompressionLevel::CMPR_LVL_VERYFAST;
-
-    cfg.checkForUpdates = true;
 
     memset(pbEvents, 0, sizeof(pbEvents));
     for (int8_t i = PB_SIZE - 1; i >= 0; --i) // in reverse order

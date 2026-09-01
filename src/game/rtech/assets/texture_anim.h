@@ -2,8 +2,7 @@
 #define TXAN_FILE_MAGIC ('N'<<24 | 'A'<<16 | 'X'<<8 | 'T')
 #define TXAN_FILE_VERSION 1 // increment this if the file format changes.
 
-// mostly reversed from r5r's r5apex.exe executable at function 0x140B00450,
-// this code is also used in function 0x140B007F0.
+// Texture animation header.
 struct TextureAnimLayer_t
 {
 	// the layer animates from start texture to end, start can be higher than
@@ -22,7 +21,7 @@ struct TextureAnimAssetHeader_v1_t
 {
 	TextureAnimLayer_t* layers; // the actual txan data, starts with TextureAnimDataHeader_t followed by data, array size is layerCount.
 	uint8_t* slots; // points to what appears to be slots indices, its size is the highest referenced slot in TextureAnimLayer_t.
-	int layerCount; // num layers, this is confirmed to be a 32bit int by the instruction at r5r's [r5apex.exe + AFFD2A].
+	int layerCount;
 
 	// always 0 and no usages in game after several dynamic breakpoint sessions, this is most likely just padding for the header
 	// as it is aligned to 8, and we are 4 bytes short for that boundary without this.

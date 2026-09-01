@@ -1,7 +1,7 @@
 #include "pch.h"
 #include <game/audio/miles.h>
 
-#if !defined(MILES_NO_RADAUDIO)
+#if defined(MILES_RADAUDIO)
 #include <game/rtech/utils/utils.h>
 #include <thirdparty/radaudio/rada_decode.h>
 
@@ -9,7 +9,7 @@
 
 #define min(a,b) a < b ? a : b
 
-bool ASI_stream_parse_metadata(const char* buffer, size_t dataSize, uint16_t* outChannels, uint32_t* outSampleRate, uint32_t* outFrameCount, int* outDecoderInfo, uint32_t* outMemNeededToOpen)
+bool ASI_stream_parse_metadata(const char* buffer, size_t dataSize, uint16_t* outChannels, uint32_t* outSampleRate, uint32_t* outFrameCount, int* outSizeInfo, uint32_t* outMemNeededToOpen)
 {
 	const RadAFileHeader* header = RadAGetFileHeader(reinterpret_cast<const uint8_t*>(buffer), dataSize);
 
@@ -46,16 +46,17 @@ bool ASI_stream_parse_metadata(const char* buffer, size_t dataSize, uint16_t* ou
 	*outSampleRate = sampleRate;
 	*outFrameCount = static_cast<uint32_t>(header->frame_count);
 
-	outDecoderInfo[0] = sizeToOpen; // container data size required to open the decoder stream
-	outDecoderInfo[1] = header->max_block_size;
-	outDecoderInfo[2] = RadADecodeBlock_MaxOutputFrames; // max number of samples per decode
-	outDecoderInfo[3] = 2; // decode format, 0 - pcm, 2 - 32bit float
+	outSizeInfo[0] = sizeToOpen; // container data size required to open the decoder stream
+	outSizeInfo[1] = header->max_block_size;
+	outSizeInfo[2] = RadADecodeBlock_MaxOutputFrames; // max number of samples per decode
+	outSizeInfo[3] = 2; // decode format, 0 - pcm, 2 - 32bit float
 
 	if (outMemNeededToOpen)
 		*outMemNeededToOpen = sizeToOpen;
 
 	return true;
 }
+
 
 uint8_t ASI_open_stream(RadAContainer* container, size_t* pContainerSize, ASI_read_stream_f readFunc, void* streamUserData)
 {
@@ -78,26 +79,18 @@ uint8_t ASI_open_stream(RadAContainer* container, size_t* pContainerSize, ASI_re
 	char* fileBuffer = new char[v11];
 	memcpy(fileBuffer, headerBuffer, sizeof(RadAFileHeader));
 
-	header = reinterpret_cast<RadAFileHeader*>(fileBuffer);
+	// clean up header buffer
 	delete[] headerBuffer;
+	headerBuffer = nullptr;
 
 	if (readFunc(fileBuffer + sizeof(RadAFileHeader), static_cast<uint32_t>(v11 - sizeof(RadAFileHeader)), streamUserData) != v11 - sizeof(RadAFileHeader))
-	{
-		delete[] fileBuffer;
 		return 0;
-	}
 
 	if (!RadAOpenDecoder(reinterpret_cast<const uint8_t*>(fileBuffer), v11, container, *pContainerSize))
-	{
-		delete[] fileBuffer;
 		return 0;
-	}
 
 	if (header->seek_table_entry_count != 0)
-	{
-		delete[] fileBuffer;
 		return 2;
-	}
 	else
 		return 1;
 }
@@ -236,7 +229,7 @@ MilesASIDecoder_t* GetRadAudioDecoder()
 	memset(radAudio, 0, sizeof(MilesASIDecoder_t));
 
 	radAudio->unk0 = 1;
-	radAudio->decoderType = MILES_DECODER_RADA;
+	radAudio->decoderType = 6;
 	radAudio->ASI_stream_parse_metadata = ASI_stream_parse_metadata;
 	radAudio->ASI_open_stream = ASI_open_stream;
 	radAudio->ASI_notify_seek = ASI_notify_seek;

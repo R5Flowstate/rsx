@@ -60,6 +60,10 @@
 #pragma comment(lib, "d3dcompiler") // Automatically link with d3dcompiler.lib as we are using D3DCompile() below.
 #endif
 
+#include <string>
+#include <cstdio>
+#include <core/utils/exportsettings.h>
+
 // Clang/GCC warnings with -Weverything
 #if defined(__clang__)
 #pragma clang diagnostic ignored "-Wold-style-cast"         // warning: use of old-style cast                            // yes, they are more terse.

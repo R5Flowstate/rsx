@@ -7,7 +7,7 @@
 
 extern CDXParentHandler* g_dxHandler;
 
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 void LoadShaderAsset(CAssetContainer* pak, CAsset* asset)
 {
@@ -54,34 +54,33 @@ void LoadShaderAsset(CAssetContainer* pak, CAsset* asset)
 		if (pakAsset->data()->HasValidDataPagePointer())
 		{
 			shaderAsset = new ShaderAsset(hdr, reinterpret_cast<ShaderAssetCPU_t*>(pakAsset->cpu()));
-		}
-		// there are shaders that have all of the following:
-		// - have no data
-		// - have an invalid shaderType
-		// - have a guid in the place of a pointer in unk_18
-		// the guid is for a shader asset, perhaps these are child assets of a shader?
-		// todo: get data from these parent shaders and parse
-		else // if no cpu data page, manually construct the values that can be taken from the header only
-		{
-			shaderAsset = new ShaderAsset();
 
-			shaderAsset->name = hdr->name;
-			shaderAsset->type = hdr->type;
-			shaderAsset->numShaders = 0;
-			shaderAsset->data = nullptr;
-			shaderAsset->dataSize = 0;
-		}
+			// v16 env-combo count uses envOptScales idx 1,2,5 -- not the v15 1,2,3,6 set.
+			// v16 sc[5] is the debug-permutation strip mask; carrying it on v15 sc[3] picks the stripped entry.
+			if (pakAsset->version() >= 16 && shaderAsset->numShaders != 0)
+			{
+				uint8_t* const f = shaderAsset->shaderFeatures;
+				if (f[0] == 0xFF) // MTLENVOPT
+				{
+					int count = (f[1] != 0) + 1;   // base = envOptScales[0]
+					if (f[2]) count *= 2;          // envOptScales[1]
+					if (f[3]) count *= 2;          // envOptScales[2]
+					if (f[6]) count *= 2;          // envOptScales[5]  (v16 debug factor)
+					shaderAsset->numShaders = count;
 
-		break;
-	}
-	case 19: // man idfk
-	{
-		// [rika]: there's some where shaders in newer versions that don't have cpu data, and point to places that don't really have a shader header
-		ShaderAssetHeader_v14_t* hdr = reinterpret_cast<ShaderAssetHeader_v14_t*>(pakAsset->header());
-
-		if (pakAsset->data()->HasValidDataPagePointer())
-		{
-			shaderAsset = new ShaderAsset(hdr, reinterpret_cast<ShaderAssetCPU_t*>(pakAsset->cpu()));
+					// Same-GUID S21 originals: v16 sc3 -> v15 sc4 (descriptive),
+					// v16 sc5 is consumed as isReference=n/2 (Repak) so v15 sc5 = 0.
+					// v15 sc3 (f[4]) is a live doubler in shipping paks -- never carry v16 debug there.
+					f[5] = f[4];                   // v15 sc4 = v16 sc3
+					f[4] = 0;                      // v15 sc3 = 0
+					f[6] = 0;                      // v15 sc5 = 0 (was kept; originals zero it)
+					f[7] = 0;
+				}
+				else
+				{
+					shaderAsset->numShaders = f[0]; // literal MTLENVTYPE_CUSTOM_COUNT_N (same both)
+				}
+			}
 		}
 		// there are shaders that have all of the following:
 		// - have no data
@@ -198,7 +197,7 @@ ID3D11InputLayout* Shader_CreateInputLayoutFromFlags(const uint64_t inputFlags, 
 
 			desc.Format = (inputFlags & VLF_BLENDWEIGHT_PACKED) ? DXGI_FORMAT_R16G16_SINT : DXGI_FORMAT_R32G32_FLOAT;
 
-			elementOffset += (0x2132100 >> (((inputFlags >> 10) & 0x18) + 2)) & 0xC;	
+			elementOffset += (0x2132100 >> (((inputFlags >> 10) & 0x18) + 2)) & 0xC;
 		}
 
 		D3D11_INPUT_ELEMENT_DESC& desc = inputElements[elementIndex++];
@@ -310,12 +309,31 @@ ID3D11InputLayout* Shader_CreateInputLayoutFromFlags(const uint64_t inputFlags, 
 	return inputLayout;
 }
 
+// [cafe] Detect Shader Model 5.1 (DX12-era) bytecode from a DXBC blob's SHEX/SHDR version token.
+// The S21 DX11 device cannot CreatePixelShader SM5.1 -> E_INVALIDARG. buf points at 'DXBC'.
+static bool DXBC_IsShaderModel51(const char* const buf)
+{
+	if (!buf || memcmp(buf, "DXBC", 4) != 0)
+		return false;
+	const uint32_t chunkCount = *reinterpret_cast<const uint32_t*>(buf + 0x1C);
+	if (chunkCount == 0 || chunkCount > 32)
+		return false;
+	const uint32_t* const offs = reinterpret_cast<const uint32_t*>(buf + 0x20);
+	for (uint32_t k = 0; k < chunkCount; ++k)
+	{
+		const char* const chunk = buf + offs[k];
+		if (memcmp(chunk, "SHEX", 4) == 0 || memcmp(chunk, "SHDR", 4) == 0)
+		{
+			const uint32_t ver = *reinterpret_cast<const uint32_t*>(chunk + 8);
+			return (((ver >> 4) & 0xF) == 5) && ((ver & 0xF) == 1);
+		}
+	}
+	return false;
+}
+
 void PostLoadShaderAsset(CAssetContainer* const pak, CAsset* const asset)
 {
 	UNUSED(pak);
-
-	//if (asset->GetAssetVersion().majorVer == 19)
-	//	return;
 
 	CPakAsset* pakAsset = static_cast<CPakAsset*>(asset);
 
@@ -346,6 +364,13 @@ void PostLoadShaderAsset(CAssetContainer* const pak, CAsset* const asset)
 #endif
 
 	ShaderAsset* const shaderAsset = pakAsset->extraData<ShaderAsset* const>();
+
+	// LoadShaderAsset only handles versions 8..17; anything newer falls through its
+	// default case and returns WITHOUT setting extra data (the assert there is
+	// compiled out of release). Post-load then dereferenced null and took the whole
+	// run down -- an unsupported shader version must not kill the export.
+	if (!shaderAsset)
+		return;
 
 	if (shaderAsset->numShaders != -1)
 	{
@@ -451,9 +476,45 @@ void PostLoadShaderAsset(CAssetContainer* const pak, CAsset* const asset)
 
 		}
 
+		// A DX11 device cannot create SM5.1 bytecode, and marking the SM5.1 buffer as a
+		// reference to its sibling corrupts the d3d11 heap in the engine's CreateXShader.
+		// So substitute the sibling's bytecode outright: the permutation then renders as
+		// its sibling, which is an APPROXIMATION, not a downgrade. -keepsm51 turns it off,
+		// which is what a DX12 target wants.
+		if (!g_ExportSettings.shaderKeepSM51)
+		{
+			int sm50Index = -1;
+			for (size_t bi = 0; bi < shaderAsset->shaderBuffers.size(); ++bi)
+			{
+				const ShaderBufEntry_t& b = shaderAsset->shaderBuffers[bi];
+				if (b.buffer && b.bufferSize > 0 && !DXBC_IsShaderModel51(b.buffer)) { sm50Index = static_cast<int>(bi); break; }
+			}
+			if (sm50Index >= 0)
+			{
+				const ShaderBufEntry_t sm50 = shaderAsset->shaderBuffers[sm50Index];
+				int substituted = 0;
+				for (ShaderBufEntry_t& b : shaderAsset->shaderBuffers)
+				{
+					if (b.buffer && b.bufferSize > 0 && DXBC_IsShaderModel51(b.buffer))
+					{
+						b.buffer = sm50.buffer;       // duplicate the SM5.0 bytecode for this slot
+						b.bufferSize = sm50.bufferSize;
+						b.isRef = false;
+						b.isNullBuffer = false;
+						b.isZeroLength = false;
+						substituted++;
+					}
+				}
+
+				if (substituted > 0)
+					Log("shader %llx: %d SM5.1 permutation(s) exported as their SM5.0 sibling (buffer %d); pass -keepsm51 to keep the SM5.1 bytecode.\n",
+						pakAsset->guid(), substituted, sm50Index);
+			}
+		}
+
 	}
 
-#if (ADVANCED_MODEL_PREVIEW) // saves some memory and loading time if we don't create these when AMP is not enabled
+#if defined(ADVANCED_MODEL_PREVIEW) // saves some memory and loading time if we don't create these when AMP is not enabled
 	HRESULT hr = E_INVALIDARG;
 
 	switch (shaderAsset->type)
@@ -538,7 +599,7 @@ void* PreviewShaderAsset(CAsset* const asset, const bool firstFrameForAsset)
 		inputFlagsStr += "]";
 
 		// yes i know the const_cast is bad, but the input is ReadOnly so it shouldn't be an issue
-		ImGui::InputTextMultiline("Shader Input Flags", const_cast<char*>(inputFlagsStr.c_str()), inputFlagsStr.length()+1, ImVec2(0, 800), ImGuiInputTextFlags_ReadOnly);
+		ImGui::InputTextMultiline("Shader Input Flags", const_cast<char*>(inputFlagsStr.c_str()), inputFlagsStr.length(), ImVec2(0, 800), ImGuiInputTextFlags_ReadOnly);
 	}
 
 
@@ -695,22 +756,35 @@ bool ExportShaderAsset(CAsset* const asset, const int setting)
 {
 	CPakAsset* pakAsset = static_cast<CPakAsset*>(asset);
 
+	// [rexx]: SHDR v17 is temporarily disabled for export since it seems to be a little bit messed up
+	if (pakAsset->version() == 17)
+		return false;
+
+
 	const ShaderAsset* const shaderAsset = pakAsset->extraData<const ShaderAsset* const>();
 
-	if (!shaderAsset) return false;
+	// null on any version LoadShaderAsset does not handle; the assert that used to
+	// stand here is compiled out of release, so this dereferenced null instead.
+	if (!shaderAsset)
+		return false;
 
 	// shaders with no data/invalid type need to be skipped until we properly handle them
 	if (shaderAsset->type >= eShaderType::Invalid)
 	{
-		Log("SHDR: Tried to export %s with invalid shader type, skipping...\n", asset->GetAssetName().c_str());
+		size_t nDataBufs = 0, totalBytes = 0;
+		for (auto& buf : shaderAsset->shaderBuffers) { if (buf.buffer && buf.bufferSize > 0) { nDataBufs++; totalBytes += buf.bufferSize; } }
+		printf("[SHDR-DIAG] %s ver=%d type=%d buffers=%zu dataBufs=%zu totalBytes=%zu inputFlags=%p name=%s -- skipping\n",
+			asset->GetAssetName().c_str(), pakAsset->version(), (int)shaderAsset->type,
+			shaderAsset->shaderBuffers.size(), nDataBufs, totalBytes, (void*)shaderAsset->inputFlags,
+			shaderAsset->name ? shaderAsset->name : "(null)");
 		return false;
 	}
 
 	// Create exported path + asset path.
-	std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+	std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
 	const std::filesystem::path shaderPath(asset->GetAssetName());
 
-	if (g_rsxSettings.exportPathsFull)
+	if (g_ExportSettings.exportPathsFull)
 		exportPath.append(shaderPath.parent_path().string());
 	else
 		exportPath.append(s_PathPrefixSHDR);
@@ -748,10 +822,11 @@ bool ExportShaderAsset(CAsset* const asset, const int setting)
 std::map<uint32_t, ShaderResource> ResourceBindingFromDXBlob(CPakAsset* const asset, D3D_SHADER_INPUT_TYPE inputType)
 {
 	const ShaderAsset* const shaderAsset = asset->extraData<const ShaderAsset* const>();
+	assertm(shaderAsset, "Extra asset data should be valid at this point.");
 
 	std::map<uint32_t, ShaderResource> bindings;
 
-	if (!shaderAsset || !shaderAsset->data)
+	if (!shaderAsset->data)
 		return bindings;
 
 	const DXBCHeader* const hdr = reinterpret_cast<DXBCHeader*>(shaderAsset->data);
@@ -841,7 +916,9 @@ void InitShaderAssetType()
 		.loadFunc = LoadShaderAsset,
 		.postLoadFunc = PostLoadShaderAsset,
 		.previewFunc = PreviewShaderAsset,
-		.e = { ExportShaderAsset, 0, settings, ARRSIZE(settings) },
+		// default to MSW (1) so exported shaders are re-packable by Repak (matched
+		// CMultiShaderWrapperIO reader); Raw (0) writes .fxc bytecode only.
+		.e = { ExportShaderAsset, 1, settings, ARRSIZE(settings) },
 	};
 
 	REGISTER_TYPE(type);

@@ -261,7 +261,6 @@ void AngleQuaternion(RadianEuler const& angles, Quaternion& qt);
 //void AxisAngleQuaternion(const Vector& axis, float angle, Quaternion& q);
 //void BasisToQuaternion(const Vector& vecForward, const Vector& vecRight, const Vector& vecUp, Quaternion& q);
 //void MatrixQuaternion(const matrix3x4_t& mat, Quaternion& q);
-void ConcatTransforms(const matrix3x4_t& in1, const matrix3x4_t& in2, matrix3x4_t& out);
 
 // misc vector funcs
 void VectorYawRotate(const Vector& in, float flYaw, Vector& out);

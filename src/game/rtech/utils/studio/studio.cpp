@@ -14,7 +14,7 @@ physicsDataBuffer(nullptr), physicsDataOffset(0), physicsDataSize(0), animDataBu
     char* curpos = buffer;  // current position in the buffer
     size_t curoff = 0ull;   // current offset in the buffer
 
-    const char* const fileName = GetStringAfterLastSlash(name);
+    const char* const fileName = keepAfterLastSlashOrBackslash(name);
 
     for (int i = 0; i < LooseDataType::SLD_COUNT; i++)
     {

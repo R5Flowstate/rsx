@@ -7,12 +7,11 @@ CCacheDBManager g_cacheDBManager;
 
 bool CCacheDBManager::SaveToFile(const std::string& path)
 {
-	HANDLE fileHandle = WaitForFileHandle(250u, 10000u, path.c_str(),
-		(GENERIC_READ | GENERIC_WRITE), FILE_SHARE_READ, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+	HANDLE fileHandle = WaitForFileHandle(250u, 10000u, path.c_str(), (GENERIC_READ | GENERIC_WRITE), FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
 	if (fileHandle == INVALID_HANDLE_VALUE)
 	{
-		Log("CACHE: Failed to get a file handle after waiting, cache file will not be updated...\n");
+		Log("Cache failed to get a file handle after waiting, cache file will not be updated...\n");
 		return false;
 	}
 
@@ -21,10 +20,8 @@ bool CCacheDBManager::SaveToFile(const std::string& path)
 	if (currFileCRC > 0 && currFileCRC != m_sourceCRC)
 	{
 		// [rika]: update cache file from the one on disk
-		if (!LoadFromFile(path))
-			return false;
-
-		Log("CACHE: Reloaded cache file after being updated by another process...\n");
+		LoadFromFile(path);
+		Log("Cache reloaded after being updated by another process...\n");
 	}
 
 	// acquire total string size for a buffer
@@ -43,28 +40,24 @@ bool CCacheDBManager::SaveToFile(const std::string& path)
 	const uint32_t numMappings = static_cast<uint32_t>(m_cacheEntries.size());
 
 	const size_t fileSize = sizeof(CacheDBHeader_t) + (numMappings * sizeof(CacheHashMapping_t)) + stringBufSize;
+	char* const fileBuf = new char[fileSize]{};
 
-	std::shared_ptr<char> fileBuf(new char[fileSize] {});
-
-	CacheDBHeader_t* const hdr = reinterpret_cast<CacheDBHeader_t* const>(fileBuf.get());
+	CacheDBHeader_t* const hdr = reinterpret_cast<CacheDBHeader_t* const>(fileBuf);
 	CacheHashMapping_t* mappings = reinterpret_cast<CacheHashMapping_t*>(&hdr[1]);
 	char* strings = reinterpret_cast<char*>(mappings + numMappings);
 
 	uint32_t stringOffset = 1u; // skipping the null terminator
 	strings += stringOffset;
-	for (const auto& [guid, entry] : m_cacheEntries)
+	for (const auto& it : m_cacheEntries)
 	{
+		const CCacheEntry& entry = it.second;
 		mappings->guid = entry.guid;
-		mappings->strOffset = 0;
-		mappings->fileNameOffset = 0;
 
 		// write the asset name
 		{
 			const uint32_t strLength = static_cast<uint32_t>(entry.origString.length());
 			mappings->strOffset = stringOffset;
-
-			if (strncpy_s(strings, stringBufSize - stringOffset, entry.origString.c_str(), strLength))
-				Log("CACHE: Failed to save to file; strncpy_s failed for string.\n");
+			strncpy_s(strings, stringBufSize - stringOffset, entry.origString.c_str(), strLength);
 
 			strings += strLength + 1;
 			stringOffset += strLength + 1;
@@ -75,9 +68,7 @@ bool CCacheDBManager::SaveToFile(const std::string& path)
 		{
 			const uint32_t strLength = static_cast<uint32_t>(entry.fileName.length());
 			mappings->fileNameOffset = stringOffset;
-
-			if(strncpy_s(strings, stringBufSize - stringOffset, entry.fileName.c_str(), strLength))
-				Log("CACHE: Failed to save to file; strncpy_s failed for filename.\n");
+			strncpy_s(strings, stringBufSize - stringOffset, entry.fileName.c_str(), strLength);
 
 			strings += strLength + 1;
 			stringOffset += strLength + 1;
@@ -94,8 +85,10 @@ bool CCacheDBManager::SaveToFile(const std::string& path)
 	FILE* file = FileFromHandle(fileHandle, eStreamIOMode::Write);
 	StreamIO cacheFile(file, eStreamIOMode::Write);
 
-	cacheFile.write(fileBuf.get(), fileSize);
+	cacheFile.write(fileBuf, fileSize);
 	cacheFile.close(); // closes file handle
+
+	FreeAllocArray(fileBuf);
 
 	return true;
 }
@@ -106,9 +99,7 @@ bool CCacheDBManager::LoadFromFile(const std::string& path)
 	{
 		// if the file doesn't exist yet, save the file immediately with no contents
 		// so that there is a base file to build off
-		if (!this->SaveToFile(path))
-			Log("CACHE: Failed to save initial cache database file.\n");
-
+		this->SaveToFile(path);
 		return true;
 	}
 
@@ -116,10 +107,10 @@ bool CCacheDBManager::LoadFromFile(const std::string& path)
 
 	const uint64_t cacheFileSize = cacheFile.size();
 
-	std::shared_ptr<char> fileData(new char[cacheFileSize] {});
-	cacheFile.read(const_cast<char*>(fileData.get()), cacheFileSize);
+	const char* fileData = new char[cacheFileSize];
+	cacheFile.read(const_cast<char*>(fileData), cacheFileSize);
 
-	const CacheDBHeader_t* header = reinterpret_cast<const CacheDBHeader_t*>(fileData.get());
+	const CacheDBHeader_t* header = reinterpret_cast<const CacheDBHeader_t*>(fileData);
 
 	switch (header->fileVersion)
 	{
@@ -132,7 +123,7 @@ bool CCacheDBManager::LoadFromFile(const std::string& path)
 		Log("CACHE: CacheDB file was old version: \"%s\". Upgrading file...\n", path.c_str());
 
 		fileData = UpgradeLegacyFile_V1(path, fileData, cacheFileSize);
-		header = reinterpret_cast<const CacheDBHeader_t*>(fileData.get());
+		header = reinterpret_cast<const CacheDBHeader_t*>(fileData);
 
 		break;
 	}
@@ -166,6 +157,8 @@ bool CCacheDBManager::LoadFromFile(const std::string& path)
 		AddInternal(entry);
 	}
 
+
+	delete[] fileData;
 	cacheFile.close();
 
 	return true;
@@ -192,12 +185,12 @@ void CCacheDBManager::Add(const CCacheEntry& entry)
 
 void CCacheDBManager::AddInternal(const CCacheEntry& entry)
 {
-	std::unique_lock lock(m_cacheMutex);
+	std::lock_guard lock(m_cacheMutex);
 
 	m_cacheEntries.emplace(entry.guid, entry);
 }
 
-uint32_t CCacheDBManager::LoadCRCFromFile(const std::string& path) const
+const uint32_t CCacheDBManager::LoadCRCFromFile(const std::string& path) const
 {
 	if (!std::filesystem::exists(path) || std::filesystem::file_size(path) == 0ull)
 	{
@@ -213,7 +206,7 @@ uint32_t CCacheDBManager::LoadCRCFromFile(const std::string& path) const
 	return tmp.fileCRC;
 }
 
-uint32_t CCacheDBManager::ParseCRCFromFile(const std::string& path) const
+const uint32_t CCacheDBManager::ParseCRCFromFile(const std::string& path) const
 {
 	constexpr size_t headerSize = sizeof(CacheDBHeader_t);
 
@@ -234,11 +227,10 @@ uint32_t CCacheDBManager::ParseCRCFromFile(const std::string& path) const
 
 	const uint32_t out = crc32::byteLevel(reinterpret_cast<const uint8_t*>(fileBuf), fileSize);
 
-	delete[] fileBuf;
 	return out;
 }
 
-std::shared_ptr<char> CCacheDBManager::UpgradeLegacyFile_V1(const std::string& path, std::shared_ptr<char> fileBuf, const size_t fileBufSize) const
+char* CCacheDBManager::UpgradeLegacyFile_V1(const std::string& path, const char* const fileBuf, const size_t fileBufSize) const
 {
 	assertm(fileBufSize, "invalid buffer size");
 
@@ -247,22 +239,23 @@ std::shared_ptr<char> CCacheDBManager::UpgradeLegacyFile_V1(const std::string& p
 	constexpr size_t sizeDifference = newHeaderSize - oldHeaderSize;
 
 	const size_t bufSize = fileBufSize + sizeDifference;
-	std::shared_ptr<char> buf(new char[bufSize] {});
+	char* buf = new char[bufSize]{};
 
-	CacheDBHeader_t* const newHdr = reinterpret_cast<CacheDBHeader_t* const>(buf.get());
-	const CacheDBHeader_v1_t* const oldHdr = reinterpret_cast<const CacheDBHeader_v1_t* const>(fileBuf.get());
+	CacheDBHeader_t* const newHdr = reinterpret_cast<CacheDBHeader_t* const>(buf);
+	const CacheDBHeader_v1_t* const oldHdr = reinterpret_cast<const CacheDBHeader_v1_t* const>(fileBuf);
 
-	if (!memcpy_s(buf.get() + newHeaderSize, bufSize - newHeaderSize, fileBuf.get() + oldHeaderSize, fileBufSize - oldHeaderSize))
-		Log("CACHE: Failed to upgrade legacy file; copy operation failed.\n");
+	memcpy_s(buf + newHeaderSize, bufSize - newHeaderSize, fileBuf + oldHeaderSize, fileBufSize - oldHeaderSize);
 
 	newHdr->fileVersion = CACHE_DB_FILE_VERSION;
-	newHdr->fileCRC = crc32::byteLevel(reinterpret_cast<const uint8_t*>(buf.get()) + newHeaderSize, bufSize - newHeaderSize);
+	newHdr->fileCRC = crc32::byteLevel(reinterpret_cast<const uint8_t*>(buf) + newHeaderSize, bufSize - newHeaderSize);
 	newHdr->numMappings = oldHdr->numMappings;
 	newHdr->stringTableOffset = oldHdr->stringTableOffset + sizeDifference;
 
+	FreeAllocArray(fileBuf);
+
 	// [rika]: write the new cache file
 	StreamIO cacheFile(path, eStreamIOMode::Write);
-	cacheFile.write(buf.get(), bufSize);
+	cacheFile.write(buf, bufSize);
 	cacheFile.close();
 
 	return buf;

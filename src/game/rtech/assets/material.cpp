@@ -7,10 +7,9 @@
 #include <thirdparty/imgui/misc/imgui_utility.h>
 #include <core/render/dx.h>
 #include <core/render/dxutils.h>
-#include <core/render/ui/styles.h>
 
 extern CDXParentHandler* g_dxHandler;
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 static const char* const s_PathPrefixTXTR = s_AssetTypePaths.find(AssetType_t::TXTR)->second;
 static const size_t s_PathPrefixTXTRSize = sizeof(s_PathPrefixTXTR) - 1; // [rika]: sizeof() includes the null terminator, which we don't need
@@ -191,7 +190,7 @@ void LoadMaterialAsset(CAssetContainer* const container, CAsset* const asset)
             assertm(false, "Unknown header size for Material asset version 23");
             break;
         }
-        }        
+        }
 
         break;
     }
@@ -247,7 +246,13 @@ void PostLoadMaterialAsset(CAssetContainer* const container, CAsset* const asset
     {
         ShaderSetAsset* const shdsAsset = materialAsset->shaderSetAsset->extraData<ShaderSetAsset*>();
 
-        if (shdsAsset->pixelShaderAsset)
+        // Finding the shaderset ASSET says nothing about it having been parsed:
+        // LoadShaderSetAsset handles versions 8..14 and returns without setting
+        // extra data for anything newer, so a material referencing a newer
+        // shaderset reaches here with a null. This is the same shape as the
+        // shader post-load null -- an unsupported child version must not fault
+        // the parent.
+        if (shdsAsset && shdsAsset->pixelShaderAsset)
         {
             materialAsset->resourceBindings = ResourceBindingFromDXBlob(shdsAsset->pixelShaderAsset, D3D10_SIT_TEXTURE);
             materialAsset->cpuDataBuf = ConstBufVarFromDXBlob(shdsAsset->pixelShaderAsset, "CBufUberStatic");
@@ -272,7 +277,7 @@ void PostLoadMaterialAsset(CAssetContainer* const container, CAsset* const asset
         materialAsset->txtrAssets.push_back(TextureAssetEntry_t(textureAsset, static_cast<uint32_t>(i)));
     }
 
-    if (materialAsset->cpuData && materialAsset->cpuDataSize)
+    if (materialAsset->cpuData)
     {
         CreateD3DBuffer(g_dxHandler->GetDevice(),
             &materialAsset->uberStaticBuffer, materialAsset->cpuDataSize,
@@ -394,21 +399,21 @@ void MatPreview_DXState(const MaterialDXState_t& dxState, const uint8_t dxStateI
         {
             if(ImGui::TreeNodeEx(std::format("{}##dxs_{}", i, dxStateId).c_str(), ImGuiTreeNodeFlags_SpanAvailWidth))
             {
-                ImGuiExt::ConstIntInputLeft("Raw Value", *reinterpret_cast<const int*>(&dxState.blendStates[i]), 170, ImGuiInputTextFlags_CharsHexadecimal);
+                ImGuiConstIntInputLeft("Raw Value", *reinterpret_cast<const int*>(&dxState.blendStates[i]), 170, ImGuiInputTextFlags_CharsHexadecimal);
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 10.f);
 
-                ImGuiExt::ConstTextInputLeft("blendEnable", dxState.blendStates[i].blendEnable == 1 ? "true" : "false");
-                ImGuiExt::ConstTextInputLeft("srcBlend", D3D11_BLEND_NAMES[dxState.blendStates[i].srcBlend + 1]);
-                ImGuiExt::ConstTextInputLeft("destBlend", D3D11_BLEND_NAMES[dxState.blendStates[i].destBlend + 1]);
+                ImGuiConstTextInputLeft("blendEnable", dxState.blendStates[i].blendEnable == 1 ? "true" : "false");
+                ImGuiConstTextInputLeft("srcBlend", D3D11_BLEND_NAMES[dxState.blendStates[i].srcBlend + 1]);
+                ImGuiConstTextInputLeft("destBlend", D3D11_BLEND_NAMES[dxState.blendStates[i].destBlend + 1]);
 
-                ImGuiExt::ConstTextInputLeft("blendOp", D3D11_BLEND_OP_NAMES[dxState.blendStates[i].blendOp + 1]);
+                ImGuiConstTextInputLeft("blendOp", D3D11_BLEND_OP_NAMES[dxState.blendStates[i].blendOp + 1]);
 
-                ImGuiExt::ConstTextInputLeft("srcBlendAlpha", D3D11_BLEND_NAMES[dxState.blendStates[i].srcBlendAlpha + 1]);
-                ImGuiExt::ConstTextInputLeft("destBlendAlpha", D3D11_BLEND_NAMES[dxState.blendStates[i].destBlendAlpha + 1]);
+                ImGuiConstTextInputLeft("srcBlendAlpha", D3D11_BLEND_NAMES[dxState.blendStates[i].srcBlendAlpha + 1]);
+                ImGuiConstTextInputLeft("destBlendAlpha", D3D11_BLEND_NAMES[dxState.blendStates[i].destBlendAlpha + 1]);
 
-                ImGuiExt::ConstTextInputLeft("blendOpAlpha", D3D11_BLEND_OP_NAMES[dxState.blendStates[i].blendOpAlpha + 1]);
+                ImGuiConstTextInputLeft("blendOpAlpha", D3D11_BLEND_OP_NAMES[dxState.blendStates[i].blendOpAlpha + 1]);
 
-                ImGuiExt::ConstIntInputLeft("renderTargetWriteMask", dxState.blendStates[i].renderTargetWriteMask & 0xF, 170, ImGuiInputTextFlags_CharsHexadecimal);
+                ImGuiConstIntInputLeft("renderTargetWriteMask", dxState.blendStates[i].renderTargetWriteMask & 0xF, 170, ImGuiInputTextFlags_CharsHexadecimal);
 
                 ImGui::TreePop();
             }
@@ -418,8 +423,6 @@ void MatPreview_DXState(const MaterialDXState_t& dxState, const uint8_t dxStateI
     ImGui::Text("Depth Stencil Flags: %u", dxState.depthStencilFlags);
     ImGui::Text("Rasterizer Flags:    %u", dxState.rasterizerFlags);
 }
-
-static CDXDrawData* s_materialDrawData = nullptr;
 
 void* PreviewMaterialAsset(CAsset* const asset, const bool firstFrameForAsset)
 {
@@ -443,12 +446,6 @@ void* PreviewMaterialAsset(CAsset* const asset, const bool firstFrameForAsset)
 
     if (firstFrameForAsset)
     {
-        //if (s_materialDrawData)
-        //    delete s_materialDrawData;
-
-        //s_materialDrawData = new CDXDrawData();
-        //s_materialDrawData->dataType = CDXDrawData::DrawDataType_e::TEXTURE;
-
         selectedResource = { .resourceBindPoint = -1 }; // [rika]: just set to the base one, don't want the last mip like textures.
         //selectedTexture.reset();
         selectedTexture = NULL;
@@ -511,7 +508,7 @@ void* PreviewMaterialAsset(CAsset* const asset, const bool firstFrameForAsset)
     if (materialAsset->materialType != MaterialShaderType_t::_TYPE_LEGACY)
     {
         ImGui::SameLine();
-        ImGuiExt::HelpMarker(s_MaterialShaderTypeHelpText);
+        g_pImGuiHandler->HelpMarker(s_MaterialShaderTypeHelpText);
     }
 
     ImGui::Text("Shaderset: %s (0x%llx)", materialAsset->shaderSetAsset ? materialAsset->shaderSetAsset->GetAssetName().c_str() : "unloaded", materialAsset->shaderSet);
@@ -521,7 +518,7 @@ void* PreviewMaterialAsset(CAsset* const asset, const bool firstFrameForAsset)
     {
         ImGui::Text("Material Snapshot: %s (0x%llx)", materialAsset->snapshotAsset ? materialAsset->snapshotAsset->GetAssetName().c_str() : "unloaded", materialAsset->snapshotMaterial);
         ImGui::SameLine();
-        ImGuiExt::HelpMarker("If a material uses a snapshot, the snapshot needs to be loaded for DX States preview to be accurate.\n");
+        g_pImGuiHandler->HelpMarker("If a material uses a snapshot, the snapshot needs to be loaded for DX States preview to be accurate.\n");
     }
 
     // [rika]: depth materials here
@@ -614,7 +611,7 @@ void* PreviewMaterialAsset(CAsset* const asset, const bool firstFrameForAsset)
                                 if (!item->HasResourceType())
                                 {
                                     ImGui::SameLine();
-                                    ImGuiExt::HelpMarker("The material asset does not provide any resource type information for this texture entry");
+                                    g_pImGuiHandler->HelpMarker("The material asset does not provide any resource type information for this texture entry");
                                 }
                             }
 
@@ -636,7 +633,7 @@ void* PreviewMaterialAsset(CAsset* const asset, const bool firstFrameForAsset)
                                 }
                                 else
                                 {
-                                    ImGui::PushStyleColor(ImGuiCol_Text, Styles::TEXTCOL_NOT_LOADED);
+                                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.f, 0.f, 1.f));
                                     ImGui::TextUnformatted("Not Loaded");
                                     ImGui::PopStyleColor();
                                 }
@@ -647,6 +644,7 @@ void* PreviewMaterialAsset(CAsset* const asset, const bool firstFrameForAsset)
 
                         ImGui::EndTable();
                     }
+
                 }
 
                 if (selectedTexture)
@@ -658,16 +656,8 @@ void* PreviewMaterialAsset(CAsset* const asset, const bool firstFrameForAsset)
                     auto txtrBinding = g_assetData.m_assetTypeBindings.find('rtxt');
                     if (txtrBinding != g_assetData.m_assetTypeBindings.end()) LIKELY
                     {
-                        s_materialDrawData = (CDXDrawData*)txtrBinding->second.previewFunc(selectedTexture, firstFrameForTxtrAsset);
+                        txtrBinding->second.previewFunc(selectedTexture, firstFrameForTxtrAsset);
                     }
-                }
-                else
-                {
-                    // [rexx]
-                    // This is pretty bad.
-                    // This causes s_textureDrawData to be temporarily leaked until another material has textures selected
-                    // Freeing s_materialDrawData in this function causes a double free though, so it's good enough i think?
-                    s_materialDrawData = nullptr;
                 }
             }
             ImGui::EndChild();
@@ -695,7 +685,7 @@ void* PreviewMaterialAsset(CAsset* const asset, const bool firstFrameForAsset)
         ImGui::EndTabBar();
     }
 
-    return s_materialDrawData;
+    return nullptr;
 }
 
 enum eMaterialExportSetting
@@ -834,7 +824,6 @@ static inline void TextureNameGenerated(MaterialTextureExportInfo_s& info, const
     if (txtrType != eTextureType::_UNUSED)
     {
         info.exportName = std::format("{}{}", materialStem, GetTextureSuffixByType(txtrType));
-
         return;
     }
     
@@ -870,8 +859,6 @@ void ParseMaterialTextureExportInfo(std::unordered_map<uint32_t, MaterialTexture
         RemoveRenderPassSuffix(materialStem);
     }
 
-    const std::string oldMaterialStem = materialStem;
-    std::unordered_map<eTextureType, uint32_t> typeCounts;
     for (const TextureAssetEntry_t& entry : materialAsset->txtrAssets)
     {
         CPakAsset* const txtrAsset = entry.asset;
@@ -881,10 +868,6 @@ void ParseMaterialTextureExportInfo(std::unordered_map<uint32_t, MaterialTexture
 
         MaterialTextureExportInfo_s info(exportPath, txtrAsset);
         TextureAsset* const thisTexture = txtrAsset->extraData<TextureAsset* const>();
-
-        const int oldCount = typeCounts[thisTexture->type];
-        if (oldCount > 0)
-            materialStem = oldMaterialStem + std::format("_{}", oldCount);
 
         // [rika]: when model export uses this function it can't it TextureNameReal as it could change the export path so that it's not local
         // to the model, which for the time being is not supported. modeled currently calls this with nameSetting as eTextureExportName::TXTR_NAME_SMTC so it's a non issue.
@@ -931,13 +914,10 @@ void ParseMaterialTextureExportInfo(std::unordered_map<uint32_t, MaterialTexture
         default:
         {
             assertm(false, "name setting invalid (somehow)");
-            unreachable();
 
             break;
         }
         }
-
-        typeCounts[thisTexture->type]++;
 
         // check if this texture is a normal
         const DXGI_FORMAT fmt = s_PakToDxgiFormat[thisTexture->imgFormat];
@@ -1048,6 +1028,14 @@ bool ExportMaterialStruct(const MaterialAsset* const materialAsset,
     ofs << "\t\"depthStencilFlags\": \"0x" << std::uppercase << std::hex << materialAsset->dxStates[0].depthStencilFlags << "\",\n";
     ofs << "\t\"rasterizerFlags\": \"0x" << std::uppercase << std::hex << materialAsset->dxStates[0].rasterizerFlags << "\",\n";
     ofs << "\t\"uberBufferFlags\": \"0x" << std::uppercase << std::hex << (uint32_t)materialAsset->uberBufferFlags << "\",\n";
+    // v23 byte-1:1 params (RSX v22 hdr fields the unified struct now carries). Raw bits so repak reproduces them exactly.
+    ofs << "\t\"dxStateUnk28\": \"0x" << std::uppercase << std::hex << *reinterpret_cast<const uint64_t*>(materialAsset->dxStates[0].unk_28) << "\",\n";
+    ofs << "\t\"unk_C0\": \"0x" << std::uppercase << std::hex << *reinterpret_cast<const uint64_t*>(materialAsset->unk_C0) << "\",\n";
+    ofs << "\t\"unk_CC\": \"0x" << std::uppercase << std::hex << (uint32_t)materialAsset->unk_CC << "\",\n";
+    ofs << "\t\"unk_E8\": \"0x" << std::uppercase << std::hex << *reinterpret_cast<const uint32_t*>(&materialAsset->unk_E8) << "\",\n";
+    ofs << "\t\"unk_EA\": \"0x" << std::uppercase << std::hex << (uint32_t)materialAsset->unk_EA << "\",\n";
+    ofs << "\t\"unk_84\": \"0x" << std::uppercase << std::hex << materialAsset->unk_84v << "\",\n";
+    ofs << "\t\"unk_F0\": \"0x" << std::uppercase << std::hex << materialAsset->unk_F0v << "\",\n";
     ofs << "\t\"features\": \"0x" << std::uppercase << std::hex << materialAsset->unk << "\",\n";
     ofs << "\t\"samplers\": \"0x" << std::uppercase << std::hex << *(uint32_t*)materialAsset->samplers << "\",\n";
 
@@ -1063,7 +1051,7 @@ bool ExportMaterialStruct(const MaterialAsset* const materialAsset,
     ofs << "\t\"$textures\": {\n";
 
     // [rika]: force guid ?
-    if (!textureInfo.empty() && g_rsxSettings.exportTextureNameSetting != eTextureExportName::TXTR_NAME_GUID)
+    if (!textureInfo.empty() && g_ExportSettings.exportTextureNameSetting != eTextureExportName::TXTR_NAME_GUID)
     {
         size_t i = 0;
         const size_t size = materialAsset->txtrAssets.size();
@@ -1175,11 +1163,22 @@ bool ExportMaterialAsset(CAsset* const asset, const int setting)
 
     const std::filesystem::path materialPath(asset->GetAssetName());
 
-    // Create exported path + asset path.
-    std::filesystem::path exportPath = /*std::filesystem::current_path().append(*/EXPORT_DIRECTORY_NAME/*)*/; // 
+    // Create exported path + asset path. Honor the configured export directory
+    // (--exportdir on CLI) like every other asset type; the old code hardcoded
+    // the default EXPORT_DIRECTORY_NAME so materials always landed in ./exported_files.
+    std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
 
-    // truncate paths?
-    if (g_rsxSettings.exportPathsFull)
+    // Material .json output path. GUID/REAL texture modes write textures to the shared
+    // texture/ tree (texture/0x<GUID>), NOT a per-material folder -- so flattening the
+    // material to material/<stem> serves no purpose and SILENTLY COLLIDES materials that
+    // share a filename stem (e.g. the models/... and world/... variants of the same name):
+    // one overwrites the other, and the dropped material's real refs are lost downstream.
+    // Preserve the full asset hierarchy whenever textures aren't local (or -exportfullpaths
+    // is set), so every material exports to a unique, clean path.
+    const bool texturesLocalToMaterial =
+        g_ExportSettings.exportTextureNameSetting != eTextureExportName::TXTR_NAME_GUID &&
+        g_ExportSettings.exportTextureNameSetting != eTextureExportName::TXTR_NAME_REAL;
+    if (g_ExportSettings.exportPathsFull || !texturesLocalToMaterial)
         exportPath.append(materialPath.parent_path().string());
     else
     {
@@ -1200,15 +1199,14 @@ bool ExportMaterialAsset(CAsset* const asset, const int setting)
     std::unordered_map<uint32_t, MaterialTextureExportInfo_s> textureNames;
     {
         std::filesystem::path texturePath;
-        // textures should be exported to 'texture/' instead
-        // [rika]: I understand this is for repackaging assets, but it is a bit messy unfortunately.
-        if (g_rsxSettings.exportPathsFull)
-        {
-            // [rika]: when 'eTextureExportName::TXTR_NAME_REAL' or 'eTextureExportName::TXTR_NAME_GUID' setting use the short path so GUID textures to go into the base 'texture' folder.
-            const bool useShortPath = (g_rsxSettings.exportTextureNameSetting == eTextureExportName::TXTR_NAME_REAL) || (g_rsxSettings.exportTextureNameSetting == eTextureExportName::TXTR_NAME_GUID);
-
-            texturePath = useShortPath ? s_PathPrefixTXTR : ChangeFirstDirectory(materialPath.parent_path(), "texture");
-        }
+        // GUID/REAL-named textures always live in the shared texture/ tree (texture/0x<GUID>),
+        // never inside a per-material folder -- this is what lets the material .json itself use
+        // the full hierarchy above (no per-material stem folder, no stem collision).
+        const bool useShortPath = (g_ExportSettings.exportTextureNameSetting == eTextureExportName::TXTR_NAME_REAL) || (g_ExportSettings.exportTextureNameSetting == eTextureExportName::TXTR_NAME_GUID);
+        if (useShortPath)
+            texturePath = s_PathPrefixTXTR;
+        else if (g_ExportSettings.exportPathsFull)
+            texturePath = ChangeFirstDirectory(materialPath.parent_path(), "texture");
         // materials will be local to the material folder.
         else
         {
@@ -1216,11 +1214,11 @@ bool ExportMaterialAsset(CAsset* const asset, const int setting)
             texturePath = exportPath.string().c_str() + truncate;
         }
 
-        ParseMaterialTextureExportInfo(textureNames, materialAsset, texturePath, static_cast<eTextureExportName>(g_rsxSettings.exportTextureNameSetting), g_rsxSettings.exportPathsFull);
+        ParseMaterialTextureExportInfo(textureNames, materialAsset, texturePath, static_cast<eTextureExportName>(g_ExportSettings.exportTextureNameSetting), g_ExportSettings.exportPathsFull);
     }
 
     // [rika]: export the material's textures if we're doing that
-    if (g_rsxSettings.exportMaterialTextures && txtrAssetBinding != g_assetData.m_assetTypeBindings.end() && materialAsset->txtrAssets.size())
+    if (g_ExportSettings.exportMaterialTextures && txtrAssetBinding != g_assetData.m_assetTypeBindings.end() && materialAsset->txtrAssets.size())
         ExportMaterialTextures(txtrAssetBinding->second.e.exportSetting, materialAsset, textureNames);
 
     std::filesystem::path materialExportPath = exportPath;
@@ -1263,7 +1261,11 @@ void InitMaterialAssetType()
         .loadFunc = LoadMaterialAsset,
         .postLoadFunc = PostLoadMaterialAsset,
         .previewFunc = PreviewMaterialAsset,
-        .e = { ExportMaterialAsset, 0, settings, ARRSIZE(settings) },
+        // default to MATL_UBER_R ("Uber (Raw)"): writes the material definition
+        // .json (name/flags/blend+depth+raster states/shaderSet guid/$textures)
+        // + the raw .uber cpu constant buffer -- the repackable source. The old
+        // default 0 (MATL_NONE "Base (Textures)") wrote NOTHING for the material.
+        .e = { ExportMaterialAsset, eMaterialExportSetting::MATL_UBER_R, settings, ARRSIZE(settings) },
     };
 
     REGISTER_TYPE(type);

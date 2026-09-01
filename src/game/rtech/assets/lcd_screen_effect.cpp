@@ -40,7 +40,7 @@ static bool ExportLcdScreenEffectAsset(CAsset* const asset, const int setting)
         return false;
     }
 
-    std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+    std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
     std::filesystem::path rlcdPath = asset->GetAssetName();
 
     exportPath.append(rlcdPath.parent_path().string());

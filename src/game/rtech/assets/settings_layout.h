@@ -65,7 +65,7 @@ struct SettingsField_t
 // The field bucket size is always a power of 2, but its not necessarily ordered.
 // This struct is used by the game to allow indexing into fieldData using an
 // iterator on fieldCount and indexing into fieldMap to get direct access to the
-// actual field and its name. See r5r's [r5apex.exe + 0xFB33B0] to see its usage.
+// actual field and its name.
 struct SettingsFieldMap_t
 {
 	uint16_t fieldBucketIndex;
@@ -173,7 +173,7 @@ public:
 	SettingsFieldMap_t* fieldMap;
 	uint32_t hashTableSize; // Must always be a power of 2.
 	uint32_t fieldCount;
-	uint32_t extraDataSizeIndex; // Indexes into s_settingsBlockExtraDataSize (see r5reloaded [r5apex.exe + 0x5C2417]).
+	uint32_t extraDataSizeIndex; // Indexes into s_settingsBlockExtraDataSize.
 	uint32_t hashStepScale;
 	uint32_t hashSeed;
 

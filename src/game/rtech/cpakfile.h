@@ -647,25 +647,6 @@ struct PakLoadedAssetTypeInfo_t
     uint32_t headerSize;
 
     uint32_t version;
-
-    // Track if there is more than one value for either header size or version within
-    // the same file. Used for validation mode.
-    bool inconsistentHeaderSize : 1;
-    bool inconsistentVersions : 1;
-
-    // Merge loaded asset type infos from two different paks into a single struct. This is used for the CLI pak validation mode
-    // Excludes:
-    //   - offsetToNextHeaderInCollection - validation doesn't care
-    //   - headerSize                     - should be the same and gets flagged separately if not
-    void Merge(const PakLoadedAssetTypeInfo_t& rhs)
-    {
-        assetCount += rhs.assetCount;
-
-        inconsistentHeaderSize |= rhs.inconsistentHeaderSize;
-        inconsistentVersions |= rhs.inconsistentVersions;
-
-        version = std::max(version, rhs.version);
-    }
 };
 #endif // #if defined(PAKLOAD_PATCHING_ANY)
 
@@ -677,7 +658,7 @@ public:
 
     const CAsset::ContainerType GetContainerType() const { return CAsset::ContainerType::PAK; };
 
-    const bool ParseFileBuffer(const std::string& path, bool* alreadyLoaded);
+    const bool ParseFileBuffer(const std::string& path);
     const bool DecompressFileBuffer(const char* fileBuffer, std::shared_ptr<char[]>* outBuffer);
 
 #if defined(PAKLOAD_PATCHING_ANY)
@@ -811,15 +792,6 @@ private:
 
     std::shared_ptr<char[]> m_Buf;
 
-public:
-    bool segmentPaddingTooSmall : 1;
-    bool segmentPaddingTooBig : 1;
-
-    const std::unordered_map<uint32_t, PakLoadedAssetTypeInfo_t>& GetLoadedAssetTypeInfo() const
-    {
-        return loadedAssetTypeInfo;
-    };
-
 private:
 
     // Populates CPakFile members from file
@@ -851,18 +823,17 @@ private:
     inline void ResetHeaders()
     {
         // header handled differently
-        m_pSegmentHeaders  = const_cast<PakSegmentHdr_t*>(m_pHeader->GetSegmentHeaders());
-        m_pPageHeaders     = const_cast<PakPageHdr_t*>   (m_pHeader->GetPageHeaders());
-        m_pPointerHeaders  = const_cast<PakPointerHdr_t*>(m_pHeader->GetPointerHeaders());
-        m_pAssetsRaw       = const_cast<void*>           (m_pHeader->GetAssets());
-        m_pGuidRefHeaders  = const_cast<PakGuidRefHdr_t*>(m_pHeader->GetGuidRefHeaders());
+        m_pSegmentHeaders = const_cast<PakSegmentHdr_t*>(m_pHeader->GetSegmentHeaders());
+        m_pPageHeaders = const_cast<PakPageHdr_t*>   (m_pHeader->GetPageHeaders());
+        m_pPointerHeaders = const_cast<PakPointerHdr_t*>(m_pHeader->GetPointerHeaders());
+        m_pAssetsRaw = const_cast<void*>           (m_pHeader->GetAssets());
+        m_pGuidRefHeaders = const_cast<PakGuidRefHdr_t*>(m_pHeader->GetGuidRefHeaders());
         m_pDependentAssets = const_cast<int*>            (m_pHeader->GetDependentAssetData());
     }
 #endif // #if defined(PAKLOAD_PATCHING_ANY)
 
     void ProcessAssets();
 
-    void SortProcessedAssets();
     void HandleOwnPostLoad();
 
 public:
@@ -917,6 +888,153 @@ public:
         return pakStem;
     }
 //#endif // #if defined(PAKLOAD_PATCHING_ANY)
+
+    inline const std::vector<char*>& GetPageBuffers() const { return pageBuffers; }
+    inline const PakPointerHdr_t* GetPointerHeaders() const { return m_pPointerHeaders; }
+
+    // Pointer fixup entry for asset export/rebuild
+    struct PointerFixup_t
+    {
+        int srcPageIndex;
+        uint32_t srcOffset;
+        int dstPageIndex;
+        uint32_t dstOffset;
+
+        enum class Section { HEAD, CPU, OTHER };
+        Section srcSection;
+        Section dstSection;
+    };
+
+    // Collect pointer fixups that originate from within an asset's byte ranges
+    std::vector<PointerFixup_t> CollectAssetPointerFixups(
+        int headPageIndex, uint32_t headBaseOffset, uint32_t headSize,
+        int cpuPageIndex, uint32_t cpuBaseOffset, uint32_t cpuSize) const
+    {
+        std::vector<PointerFixup_t> fixups;
+
+        if (!m_pPointerHeaders || !m_pHeader)
+            return fixups;
+
+        const int numPtrs = m_pHeader->numPointers;
+        const auto& pages = pageBuffers;
+
+        for (int i = 0; i < numPtrs; i++)
+        {
+            const PakPointerHdr_t& ptrHdr = m_pPointerHeaders[i];
+
+            int adjSrcPageIdx = ptrHdr.index - firstPageIdx;
+            if (adjSrcPageIdx < 0) adjSrcPageIdx += m_pHeader->numPages;
+
+            uint32_t srcOffset = static_cast<uint32_t>(ptrHdr.offset);
+
+            bool inHeadRange = (adjSrcPageIdx == headPageIndex) &&
+                               (srcOffset >= headBaseOffset) &&
+                               (srcOffset < headBaseOffset + headSize);
+
+            bool inCpuRange = (cpuPageIndex >= 0) &&
+                              (adjSrcPageIdx == cpuPageIndex) &&
+                              (srcOffset >= cpuBaseOffset) &&
+                              (srcOffset < cpuBaseOffset + cpuSize);
+
+            if (!inHeadRange && !inCpuRange)
+                continue;
+
+            if (ptrHdr.index < 0 || static_cast<size_t>(ptrHdr.index) >= pages.size())
+                continue;
+
+            char* pageData = pages[ptrHdr.index];
+            if (!pageData)
+                continue;
+
+            char* resolvedPtr = *reinterpret_cast<char**>(pageData + ptrHdr.offset);
+            if (!resolvedPtr)
+                continue;
+
+            // Find which page this pointer points to
+            int dstPageIdx = -1;
+            uint32_t dstOffset = 0;
+            for (size_t pageIdx = 0; pageIdx < pages.size(); pageIdx++)
+            {
+                char* pageStart = pages[pageIdx];
+                if (!pageStart) continue;
+                if (pageIdx >= static_cast<size_t>(m_pHeader->numPages)) continue;
+
+                uint32_t pageSize = m_pPageHeaders[pageIdx].size;
+                if (resolvedPtr >= pageStart && resolvedPtr < pageStart + pageSize)
+                {
+                    dstPageIdx = static_cast<int>(pageIdx);
+                    dstOffset = static_cast<uint32_t>(resolvedPtr - pageStart);
+                    break;
+                }
+            }
+
+            if (dstPageIdx < 0)
+                continue;
+
+            PointerFixup_t fixup;
+            fixup.srcPageIndex = adjSrcPageIdx;
+            fixup.srcOffset = ptrHdr.offset;
+            fixup.dstPageIndex = dstPageIdx;
+            fixup.dstOffset = dstOffset;
+            fixup.srcSection = inHeadRange ? PointerFixup_t::Section::HEAD : PointerFixup_t::Section::CPU;
+            fixup.dstSection = (dstPageIdx == headPageIndex) ? PointerFixup_t::Section::HEAD :
+                               (dstPageIdx == cpuPageIndex) ? PointerFixup_t::Section::CPU :
+                               PointerFixup_t::Section::OTHER;
+
+            fixups.push_back(fixup);
+        }
+
+        return fixups;
+    }
+
+    // Serialize pointer fixups to JSON
+    static std::string SerializePointerFixupsToJSON(
+        const std::vector<PointerFixup_t>& fixups,
+        int headPageIndex,
+        int cpuPageIndex,
+        uint32_t headPageBaseOffset = 0,
+        uint32_t cpuPageBaseOffset = 0)
+    {
+        std::ostringstream json;
+        json << "\"pointerFixups\": [\n";
+
+        for (size_t i = 0; i < fixups.size(); i++)
+        {
+            const auto& f = fixups[i];
+
+            uint32_t srcRelOffset = f.srcOffset;
+            uint32_t dstRelOffset = f.dstOffset;
+
+            if (f.srcPageIndex == headPageIndex)
+                srcRelOffset -= headPageBaseOffset;
+            else if (f.srcPageIndex == cpuPageIndex)
+                srcRelOffset -= cpuPageBaseOffset;
+
+            if (f.dstPageIndex == headPageIndex)
+                dstRelOffset -= headPageBaseOffset;
+            else if (f.dstPageIndex == cpuPageIndex)
+                dstRelOffset -= cpuPageBaseOffset;
+
+            const char* srcSectionName = (f.srcSection == PointerFixup_t::Section::HEAD) ? "head" :
+                                         (f.srcSection == PointerFixup_t::Section::CPU) ? "cpu" : "other";
+            const char* dstSectionName = (f.dstSection == PointerFixup_t::Section::HEAD) ? "head" :
+                                         (f.dstSection == PointerFixup_t::Section::CPU) ? "cpu" : "other";
+
+            json << "\t\t{";
+            json << "\"srcSection\": \"" << srcSectionName << "\", ";
+            json << "\"srcOffset\": " << srcRelOffset << ", ";
+            json << "\"dstSection\": \"" << dstSectionName << "\", ";
+            json << "\"dstOffset\": " << dstRelOffset;
+            json << "}";
+
+            if (i < fixups.size() - 1)
+                json << ",";
+            json << "\n";
+        }
+
+        json << "\t]";
+        return json.str();
+    }
 };
 
 #if defined(PAKLOAD_PATCHING_ANY)
@@ -1108,8 +1226,15 @@ class CPakAsset;
 class CPakAsset : public CAsset
 {
 private:
+    //CPakFile* m_containerFile;
+    //PakAsset_t* m_assetData;
+    //std::string m_assetName;
+
     std::shared_ptr<void> m_ExtraData;
 
+    // indicates whether this asset has been exported successfully since it was loaded
+    // stores the result of whether the last export attempt succeeded
+    //bool m_exported;
 public:
     CPakAsset(CPakFile* pak, PakAsset_t* asset, std::string name)
     {
@@ -1125,6 +1250,8 @@ public:
 
     CPakAsset() = default;
     ~CPakAsset() = default;
+
+    //void SetAssetName(const std::string& path) { m_assetName = std::filesystem::path(path).make_preferred().string(); }
 
     uint32_t GetAssetType() const { return data()->type; }
 
@@ -1210,6 +1337,26 @@ public:
         }
     }
 
+    void getDependents(std::vector<AssetGuid_t>& guidsArray)
+    {
+        const int numDeps = data()->dependentsCount;
+        if (numDeps <= 0)
+        {
+            guidsArray.clear();
+            return;
+        }
+
+        guidsArray.resize(numDeps);
+        const int* const dependentAssetIndexes = &pak()->dependents()[data()->dependentsIndex];
+
+        for (int i = 0; i < numDeps; ++i)
+        {
+            const int assetIdx = dependentAssetIndexes[i];
+            const PakAsset_t* const depAsset = &pak()->internalAssets()[assetIdx];
+            guidsArray[i] = { depAsset->guid };
+        }
+    }
+
     inline const StarPak_t* getStarPak(const bool opt) const
     {
         const int pakIdx = opt ? optStarpakIdx() : starpakIdx();
@@ -1279,6 +1426,7 @@ public:
 private:
     CPakFile* const pak() { return static_cast<CPakFile*>(m_containerFile); };
     const CPakFile* const pak() const { return static_cast<const CPakFile*>(m_containerFile); };
+
 };
 
 

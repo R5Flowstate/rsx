@@ -726,10 +726,12 @@ public:
 		depthShadowMaterial(hdr->depthShadowMaterial), depthPrepassMaterial(hdr->depthPrepassMaterial), depthVSMMaterial(hdr->depthVSMMaterial), depthShadowTightMaterial(hdr->depthShadowTightMaterial), colpassMaterial(hdr->colpassMaterial), shaderSet(hdr->shaderSet),
 		numAnimationFrames(hdr->numAnimationFrames), textureAnimation(hdr->textureAnimation), textureHandles(hdr->textureHandles), streamingTextureHandles(hdr->streamingTextureHandles),
 		width(hdr->width), height(hdr->height), depth(hdr->depth), unk(hdr->unk_80), glueFlags(hdr->glueFlags), glueFlags2(hdr->glueFlags2), materialType(hdr->materialType), uberBufferFlags(hdr->uberBufferFlags), shaderSetAsset(nullptr), snapshotAsset(nullptr),
-		cpuData(cpu->data), cpuDataSize(cpu->dataSize)
+		cpuData(cpu->data), cpuDataSize(cpu->dataSize), unk_CC(hdr->unk_CC), unk_E8(hdr->unk_E8), unk_EA(hdr->unk_EA),
+		unk_84v(hdr->unk_84), unk_F0v(*reinterpret_cast<const uint32_t*>(hdr->unk_F0))
 	{
 		memcpy_s(samplers, sizeof(samplers), hdr->samplers, sizeof(hdr->samplers));
 		memcpy_s(dxStates, sizeof(dxStates), &hdr->dxStates, sizeof(hdr->dxStates));
+		memcpy_s(unk_C0, sizeof(unk_C0), hdr->unk_C0, sizeof(hdr->unk_C0)); // v23 byte-1:1 params
 
 		numRenderTargets = D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT;
 	};
@@ -798,6 +800,16 @@ public:
 
 	MaterialShaderType_t materialType;
 	uint8_t uberBufferFlags;
+
+	// v23 on-disk param fields, exported for byte-1:1 repak. RSX reads them into the v22 hdr but
+	// the unified struct + json export previously dropped them (-> repak wrote 0 -> wrong shader
+	// binding). The dxState unk_28 byte lives in dxStates[0].unk_28.
+	int unk_C0[2]{};    // @0xC0
+	int unk_CC = 0;     // @0xCC
+	float unk_E8 = 0.f; // @0xE8
+	int unk_EA = 0;     // @0xEC
+	uint32_t unk_84v = 0; // @0x84 (mask; hi-short == 1 on screen/emissive mats)
+	uint32_t unk_F0v = 0; // @0xF0 (first dword; 4 on some decals)
 	//
 
 	ID3D11Buffer* uberStaticBuffer;

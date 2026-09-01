@@ -2,10 +2,9 @@
 #include <game/rtech/assets/texture.h>
 #include <core/render/dx.h>
 #include <thirdparty/imgui/imgui.h>
-#include <core/render/ui/styles.h>
 
 extern CDXParentHandler* g_dxHandler;
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 inline std::string FormatTextureAssetName(const char* const str)
 {
@@ -66,10 +65,10 @@ void LoadTextureAsset(CAssetContainer* const pak, CAsset* const asset)
     // [rika]: verify we know this texture format
     assertm(txtrAsset->imgFormat < eTextureFormat::TEX_FMT_UNKNOWN, "unaccounted texture format!");
 
-//#ifdef _DEBUG
-//    if (txtrAsset->type != _UNUSED && s_TextureTypeMap.count(txtrAsset->type) == 0)
-//        Log("found texture '%s' with unknown texture type: %i\n", asset->GetAssetName().c_str(), txtrAsset->type);
-//#endif // _DEBUG
+#ifdef _DEBUG
+    if (txtrAsset->type != _UNUSED && s_TextureTypeMap.count(txtrAsset->type) == 0)
+        Log("found texture '%s' with unknown texture type: %i\n", asset->GetAssetName().c_str(), txtrAsset->type);
+#endif // _DEBUG
 
     txtrAsset->totalMipLevels = (txtrAsset->optStreamedMipLevels + txtrAsset->streamedMipLevels + txtrAsset->permanentMipLevels);
     txtrAsset->arraySize = txtrAsset->arraySize == 0 ? 1 : txtrAsset->arraySize;
@@ -370,13 +369,10 @@ struct TexturePreviewData_t
         TPC_Dimensions,
         TPC_Status,
         TPC_Type,
+        TPC_Comp,
         TPC_Origin,
 
         _TPC_COUNT,
-
-        // not currently used
-        TPC_Comp,
-
     };
 
     const char* typeName; // perm, stream, opt stream
@@ -433,12 +429,12 @@ struct TexCompare_t
     }
 };
 
-static CDXDrawData* s_textureDrawData = nullptr;
 void* PreviewTextureAsset(CAsset* const asset, const bool firstFrameForAsset)
 {
     CPakAsset* pakAsset = static_cast<CPakAsset*>(asset);
     TextureAsset* const txtrAsset = pakAsset->extraData<TextureAsset* const>();
 
+    static float textureZoom = 1.0f;
     static uint8_t lastSelectedMip = 0xff;
     static TexturePreviewData_t selectedMip { .index = 0xff };
     static std::shared_ptr<CTexture> selectedMipTexture = nullptr;
@@ -467,12 +463,6 @@ void* PreviewTextureAsset(CAsset* const asset, const bool firstFrameForAsset)
     static uint8_t previewMipSize = 0;
     if (firstFrameForAsset) // Reset if new asset.
     {
-        if(s_textureDrawData)
-            delete s_textureDrawData;
-
-        s_textureDrawData = new CDXDrawData();
-        s_textureDrawData->dataType = CDXDrawData::DrawDataType_e::TEXTURE;
-
         // no reason to update if the array size hasn't changed
         if (txtrAsset->arraySize != previewArrays.size())
         {
@@ -494,8 +484,6 @@ void* PreviewTextureAsset(CAsset* const asset, const bool firstFrameForAsset)
 
         for (size_t i = 0; i < ARRAYSIZE(currContainerStem); i++)
             currContainerStem[i].clear();
-
-        uint8_t highestLoadedMipIdx = 0xff;
 
         uint8_t mipIdx = 0;
         for (auto& mip : txtrAsset->mipArray)
@@ -521,27 +509,15 @@ void* PreviewTextureAsset(CAsset* const asset, const bool firstFrameForAsset)
                 if (mip.type == eTextureMipType::RPak)
                     targetStem = asset->GetContainerFileName();
                 else
-                {
-                    const char* starpakName = nullptr;
-
-                    if ((starpakName = pakAsset->getStarPakName(mip.type == eTextureMipType::OptStarPak)))
-                        targetStem = starpakName;
-                    else
-                        targetStem = "N/A";
-                }
+                    targetStem = pakAsset->getStarPakName(mip.type == eTextureMipType::OptStarPak);
 
                 previewData.dataOrigin = targetStem.c_str();
             }
 
-            if (mip.isLoaded)
-                highestLoadedMipIdx = mipIdx;
-
             mipIdx++;
         }
 
-        selectedMip = highestLoadedMipIdx != 0xFF ? previewMips.at(highestLoadedMipIdx) : previewMips.back();// selectedMip.index > previewMipSize ? previewMips.back() : selectedMip;
-        lastSelectedMip = selectedMip.level;
-
+        selectedMip = selectedMip.index > previewMipSize ? previewMips.back() : selectedMip;
         selectedArrayIndex = selectedArrayIndex > txtrAsset->arraySize ? 0 : selectedArrayIndex;
     }
 
@@ -583,17 +559,26 @@ void* PreviewTextureAsset(CAsset* const asset, const bool firstFrameForAsset)
         }
     }
 
-    if (ImGui::CollapsingHeader("Mip Levels", ImGuiTreeNodeFlags_DefaultOpen))
+    // Create a 2-column layout for mip levels and texture preview
+    if (ImGui::BeginTable("TexturePreviewLayout", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV))
     {
-        if (ImGui::BeginTable("Texture Table", TexturePreviewData_t::eColumnID::_TPC_COUNT, tableFlags, outerSize))
+        ImGui::TableSetupColumn("MipLevels", ImGuiTableColumnFlags_WidthStretch, 0.5f);
+        ImGui::TableSetupColumn("Preview", ImGuiTableColumnFlags_WidthStretch, 0.5f);
+
+        // LEFT COLUMN: Mip Levels
+        ImGui::TableNextColumn();
+
+        ImGui::Text("Mip Levels");
+        ImGui::Separator();
+
+        if (ImGui::BeginTable("Texture Table", TexturePreviewData_t::eColumnID::_TPC_COUNT, tableFlags | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingFixedFit, outerSize))
         {
-            ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, 0.0f, TexturePreviewData_t::eColumnID::TPC_Level);
-            ImGui::TableSetupColumn("Dimensions", ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed, 0.0f, TexturePreviewData_t::eColumnID::TPC_Dimensions);
-            ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed, 0.0f, TexturePreviewData_t::eColumnID::TPC_Status);
-            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed, 0.0f, TexturePreviewData_t::eColumnID::TPC_Type);
-            // for some reason this column doesn't actually get any data set to it?
-            //ImGui::TableSetupColumn("Compression", ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed, 0.0f, TexturePreviewData_t::eColumnID::TPC_Comp);
-            ImGui::TableSetupColumn("Origin", ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed, 0.0f, TexturePreviewData_t::eColumnID::TPC_Origin);
+            ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, 0.0f, TexturePreviewData_t::eColumnID::TPC_Level);
+            ImGui::TableSetupColumn("Dimensions", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, 80.0f, TexturePreviewData_t::eColumnID::TPC_Dimensions);
+            ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, 60.0f, TexturePreviewData_t::eColumnID::TPC_Status);
+            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, 80.0f, TexturePreviewData_t::eColumnID::TPC_Type);
+            ImGui::TableSetupColumn("Compression", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, 80.0f, TexturePreviewData_t::eColumnID::TPC_Comp);
+            ImGui::TableSetupColumn("Origin", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, 0.0f, TexturePreviewData_t::eColumnID::TPC_Origin);
             ImGui::TableSetupScrollFreeze(1, 1);
 
             ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs(); // get the sorting settings from this table
@@ -652,7 +637,7 @@ void* PreviewTextureAsset(CAsset* const asset, const bool firstFrameForAsset)
                     }
                     else
                     {
-                        ImGui::PushStyleColor(ImGuiCol_Text, Styles::TEXTCOL_NOT_LOADED);
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.f, 0.f, 1.f));
                         ImGui::TextUnformatted("Not Loaded");
                         ImGui::PopStyleColor();
                     }
@@ -669,10 +654,94 @@ void* PreviewTextureAsset(CAsset* const asset, const bool firstFrameForAsset)
 
             ImGui::EndTable();
         }
-    }    
 
-    // If this is the first mip that we are rendering, or if the mip selection has changed, we need to (re)create the texture
-    if (!selectedMipTexture || lastSelectedArrayIndex != selectedArrayIndex)
+        // RIGHT COLUMN: Texture Preview
+        ImGui::TableNextColumn();
+
+        ImGui::Text("Preview");
+        ImGui::Separator();
+
+        CTexture* const selectedMipTxtr = selectedMipTexture.get();
+        if (selectedMipTxtr)
+        {
+            const float aspectRatio = static_cast<float>(selectedMipTxtr->GetWidth()) / selectedMipTxtr->GetHeight();
+
+            float imageHeight = std::max(std::clamp(static_cast<float>(selectedMipTxtr->GetHeight()), 0.f, std::max(ImGui::GetContentRegionAvail().y, 1.f)) - 2.5f, 4.f);
+            float imageWidth = imageHeight * aspectRatio;
+
+            imageWidth *= textureZoom;
+            imageHeight *= textureZoom;
+
+            ImGuiStyle& style = ImGui::GetStyle();
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + style.FramePadding.y);
+
+            ImGui::Text("Scale: %.f%%", textureZoom * 100.f);
+            ImGui::SameLine();
+
+            constexpr const char* const zoomHelpText = "Hold CTRL and scroll to zoom";
+            IMGUI_RIGHT_ALIGN_FOR_TEXT(zoomHelpText);
+            ImGui::TextUnformatted(zoomHelpText);
+
+            if (ImGui::BeginChild("Texture Preview Image", ImVec2(0.f, 0.f), true, ImGuiWindowFlags_HorizontalScrollbar))
+            {
+                const bool previewHovering = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+                ImGui::Image(selectedMipTxtr->GetSRV(), ImVec2(imageWidth, imageHeight));
+                if (previewHovering && ImGui::GetIO().KeyCtrl)
+                {
+                    const float wheel = ImGui::GetIO().MouseWheel;
+                    const float scrollZoomFactor = ImGui::GetIO().KeyAlt ? (1.f / 20.f) : (1.f / 10.f);
+
+                    if (wheel != 0.0f)
+                        textureZoom += (wheel * scrollZoomFactor);
+
+                    textureZoom = std::clamp(textureZoom, 0.1f, 5.0f);
+                }
+
+                static bool resetPos = true;
+                static ImVec2 posPrev;
+                if (previewHovering && ImGui::GetIO().MouseDown[2] && !ImGui::GetIO().KeyCtrl) // middle mouse
+                {
+                    ImVec2 posCur = ImGui::GetIO().MousePos;
+
+                    if (resetPos)
+                        posPrev = posCur;
+
+                    ImVec2 delta(posCur.x - posPrev.x, posCur.y - posPrev.y);
+                    ImVec2 scroll(0.0f, 0.0f);
+
+                    scroll.x = std::clamp(ImGui::GetScrollX() + delta.x, 0.0f, ImGui::GetScrollMaxX());
+                    scroll.y = std::clamp(ImGui::GetScrollY() + delta.y, 0.0f, ImGui::GetScrollMaxY());
+
+                    ImGui::SetScrollX(scroll.x);
+                    ImGui::SetScrollY(scroll.y);
+
+                    posPrev = posCur;
+                    resetPos = false;
+                }
+                else
+                {
+                    resetPos = true;
+                }
+            }
+            ImGui::EndChild();
+        }
+        else
+        {
+            ImGui::TextUnformatted("No preview available.");
+        }
+
+        ImGui::EndTable();
+    }
+
+    // Handle texture creation if not yet available
+    CTexture* const selectedMipTxtrCheck = selectedMipTexture.get();
+    if (!selectedMipTxtrCheck)
+    {
+        const TextureMip_t* const mip = &txtrAsset->mipArray.at(selectedMip.index);
+        selectedMipTexture = CreateTextureFromMip(pakAsset, mip, s_PakToDxgiFormat[txtrAsset->imgFormat], selectedArrayIndex);
+    }
+
+    if (lastSelectedArrayIndex != selectedArrayIndex)
     {
         lastSelectedArrayIndex = selectedArrayIndex;
 
@@ -680,9 +749,7 @@ void* PreviewTextureAsset(CAsset* const asset, const bool firstFrameForAsset)
         selectedMipTexture = CreateTextureFromMip(pakAsset, mip, s_PakToDxgiFormat[txtrAsset->imgFormat], selectedArrayIndex);
     }
 
-    s_textureDrawData->previewTexture = selectedMipTexture;
-
-    return s_textureDrawData;
+    return nullptr;
 }
 
 inline void NormalRecalc(const bool isNormal, CTexture* texture)
@@ -690,7 +757,7 @@ inline void NormalRecalc(const bool isNormal, CTexture* texture)
     if (!isNormal)
         return;
 
-    switch (g_rsxSettings.exportNormalRecalcSetting)
+    switch (g_ExportSettings.exportNormalRecalcSetting)
     {
     case eNormalExportRecalc::NML_RECALC_DX:
     {
@@ -954,15 +1021,13 @@ bool ExportTextureAsset(CAsset* const asset, const int setting)
     const TextureAsset* const txtrAsset = pakAsset->extraData<const TextureAsset* const>();
 
     // Create exported path + asset path.
-    std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+    std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
     const std::filesystem::path texturePath(asset->GetAssetName());
 
-    const bool hasFullPath =
-        txtrAsset->name != nullptr ||
-        g_cacheDBManager.TryGetEntry(pakAsset->GetAssetGUID()).has_value();
+    const bool hasFullPath = txtrAsset->name != nullptr || g_cacheDBManager.LookupGuid(pakAsset->GetAssetGUID(), nullptr);
 
     // [rika]: there is no point to add the parent path if we don't have a proper name (it will just end up in 's_PathPrefixTXTR' anyway)
-    if (hasFullPath && g_rsxSettings.exportPathsFull)
+    if (hasFullPath && g_ExportSettings.exportPathsFull)
         exportPath.append(texturePath.parent_path().string());
     else
         exportPath.append(s_PathPrefixTXTR);
@@ -1189,7 +1254,10 @@ void InitTextureAssetType()
         .loadFunc = LoadTextureAsset,
         .postLoadFunc = nullptr,
         .previewFunc = PreviewTextureAsset,
-        .e = { ExportTextureAsset, 0, settings, ARRSIZE(settings) }
+        // default to DDS mipmapped (single file, full mip chain, raw BCn bytes
+        // copied verbatim -- NO re-encode) so textures extract losslessly for
+        // re-packing. PNG is a decoded/lossy form unfit for 1:1 repack.
+        .e = { ExportTextureAsset, eTextureExportSetting::DDS_MM, settings, ARRSIZE(settings) }
     };
 
     REGISTER_TYPE(type);

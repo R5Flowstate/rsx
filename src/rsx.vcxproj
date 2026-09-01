@@ -5,10 +5,6 @@
       <Configuration>Debug</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
-    <ProjectConfiguration Include="Release_CI|x64">
-      <Configuration>Release_CI</Configuration>
-      <Platform>x64</Platform>
-    </ProjectConfiguration>
     <ProjectConfiguration Include="Release_NoGui|x64">
       <Configuration>Release_NoGui</Configuration>
       <Platform>x64</Platform>
@@ -19,21 +15,17 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="core\audio\audioplayer.h" />
-    <ClInclude Include="core\bridge\bridge.h" />
     <ClInclude Include="core\cache\cachedb.h" />
     <ClInclude Include="core\crashhandler.h" />
     <ClInclude Include="core\features.h" />
-    <ClInclude Include="core\filehandling\validation.h" />
-    <ClInclude Include="core\fonts\codicons.h" />
     <ClInclude Include="core\mdl\animdata.h" />
+    <ClInclude Include="core\mdl\anim_qc.h" />
     <ClInclude Include="core\mdl\modeldata.h" />
     <ClInclude Include="core\mdl\qc.h" />
     <ClInclude Include="core\mdl\smd.h" />
     <ClInclude Include="core\render\dx.h" />
     <ClInclude Include="core\render\dxscene.h" />
     <ClInclude Include="core\render\dxshader.h" />
-    <ClInclude Include="core\render\preview\grid.h" />
     <ClInclude Include="core\render\preview\lighting.h" />
     <ClInclude Include="core\render\preview\preview.h" />
     <ClInclude Include="core\render\uistate.h" />
@@ -55,29 +47,21 @@
     <ClInclude Include="core\mdl\rmax.h" />
     <ClInclude Include="core\mdl\stringtable.h" />
     <ClInclude Include="core\render.h" />
-    <ClInclude Include="core\render\ui\styles.h" />
     <ClInclude Include="core\shaderexp\multishader.h" />
-    <ClInclude Include="core\splash.h" />
-    <ClInclude Include="core\update\update.h" />
     <ClInclude Include="core\utils\buffermanager.h" />
     <ClInclude Include="core\utils\cli_parser.h" />
     <ClInclude Include="core\utils\crc32.h" />
-    <ClInclude Include="core\utils\curlutils.h" />
     <ClInclude Include="core\utils\exportsettings.h" />
     <ClInclude Include="core\utils\fileio.h" />
-    <ClInclude Include="core\utils\gamefinder.h" />
-    <ClInclude Include="core\utils\jsonutils.h" />
     <ClInclude Include="core\utils\keyvalue_parser.h" />
     <ClInclude Include="core\utils\ramen.h" />
     <ClInclude Include="core\utils\textbuffer.h" />
     <ClInclude Include="core\utils\thread.h" />
     <ClInclude Include="core\utils\utils_general.h" />
-    <ClInclude Include="core\version.h" />
+    <ClInclude Include="core\utils\autoupdater.h" />
     <ClInclude Include="core\window.h" />
     <ClInclude Include="game\asset.h" />
-    <ClInclude Include="game\audio\event.h" />
     <ClInclude Include="game\audio\miles.h" />
-    <ClInclude Include="game\audio\source.h" />
     <ClInclude Include="game\audio\wavefile.h" />
     <ClInclude Include="game\bluepoint\bp_pakfile.h" />
     <ClInclude Include="game\bsp\bsp.h" />
@@ -86,7 +70,6 @@
     <ClInclude Include="game\rtech\assets\animseq.h" />
     <ClInclude Include="game\rtech\assets\animseq_data.h" />
     <ClInclude Include="game\rtech\assets\anim_recording.h" />
-    <ClInclude Include="game\rtech\assets\cube.h" />
     <ClInclude Include="game\rtech\assets\datatable.h" />
     <ClInclude Include="game\rtech\assets\effect.h" />
     <ClInclude Include="game\rtech\assets\impact.h" />
@@ -130,7 +113,7 @@
     <ClInclude Include="game\rtech\utils\studio\studio_r5_v12.h" />
     <ClInclude Include="game\rtech\utils\studio\studio_r5_v16.h" />
     <ClInclude Include="game\rtech\utils\utils.h" />
-    <ClInclude Include="game\vpk\vpk.h" />
+    <ClInclude Include="game\rtech\utils\zstd_loader.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="thirdparty\imgui\backends\imgui_impl_dx11.h" />
@@ -142,37 +125,26 @@
     <ClInclude Include="thirdparty\imgui\imstb_textedit.h" />
     <ClInclude Include="thirdparty\imgui\imstb_truetype.h" />
     <ClInclude Include="thirdparty\imgui\misc\cpp\imgui_stdlib.h" />
-    <ClInclude Include="thirdparty\imgui\misc\ImGuiNotify.hpp" />
     <ClInclude Include="thirdparty\imgui\misc\imgui_editor.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">true</ExcludedFromBuild>
     </ClInclude>
     <ClInclude Include="thirdparty\imgui\misc\imgui_logger.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">true</ExcludedFromBuild>
     </ClInclude>
-    <ClInclude Include="thirdparty\imgui\misc\imgui_memory_editor.h" />
     <ClInclude Include="thirdparty\imgui\misc\imgui_utility.h" />
-    <ClInclude Include="thirdparty\imgui\misc\imoguizmo.hpp" />
-    <ClInclude Include="thirdparty\miniaudio\miniaudio.h" />
-    <ClInclude Include="thirdparty\rad_lzb_simple\rad_lzb_simple.h" />
-    <ClInclude Include="thirdparty\valvefilevdf\vdf_parser.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="core\audio\audioplayer.cpp" />
-    <ClCompile Include="core\bridge\bridge.cpp" />
     <ClCompile Include="core\cache\cachedb.cpp" />
     <ClCompile Include="core\crashhandler.cpp" />
     <ClCompile Include="core\filehandling\bpk.cpp" />
     <ClCompile Include="core\filehandling\list.cpp" />
     <ClCompile Include="core\filehandling\mbnk.cpp" />
-    <ClCompile Include="core\filehandling\validation.cpp" />
-    <ClCompile Include="core\filehandling\valvepak.cpp" />
     <ClCompile Include="core\mdl\animdata.cpp" />
+    <ClCompile Include="core\mdl\anim_qc.cpp" />
     <ClCompile Include="core\mdl\modeldata.cpp" />
     <ClCompile Include="core\mdl\modeldata_qc.cpp" />
     <ClCompile Include="core\mdl\qc.cpp" />
@@ -196,29 +168,22 @@
     <ClCompile Include="core\mdl\stringtable.cpp" />
     <ClCompile Include="core\render.cpp" />
     <ClCompile Include="core\render\dxutils.cpp" />
-    <ClCompile Include="core\render\preview\grid.cpp" />
-    <ClCompile Include="core\render\preview\mdlpreview.cpp" />
+    <ClCompile Include="core\render\preview\audio_preview.cpp" />
     <ClCompile Include="core\render\preview\preview.cpp" />
-    <ClCompile Include="core\render\preview\texpreview.cpp" />
     <ClCompile Include="core\render\ui\itemflav_window.cpp" />
     <ClCompile Include="core\render\ui\log_window.cpp" />
-    <ClCompile Include="core\splash.cpp" />
-    <ClCompile Include="core\update\update.cpp" />
     <ClCompile Include="core\utils\cli_parser.cpp" />
-    <ClCompile Include="core\utils\curlutils.cpp" />
     <ClCompile Include="core\utils\exportsettings.cpp" />
+    <ClCompile Include="core\utils\autoupdater.cpp" />
     <ClCompile Include="core\utils\fileio.cpp" />
-    <ClCompile Include="core\utils\jsonutils.cpp" />
     <ClCompile Include="core\utils\keyvalue_parser.cpp" />
     <ClCompile Include="core\utils\ramen.cpp" />
     <ClCompile Include="core\utils\utils_general.cpp" />
     <ClCompile Include="core\window.cpp" />
     <ClCompile Include="game\asset.cpp" />
-    <ClCompile Include="game\audio\event.cpp" />
     <ClCompile Include="game\audio\miles.cpp" />
     <ClCompile Include="game\audio\miles_bcf.cpp" />
     <ClCompile Include="game\audio\miles_rada.cpp" />
-    <ClCompile Include="game\audio\source.cpp" />
     <ClCompile Include="game\bluepoint\bp_pakfile.cpp" />
     <ClCompile Include="game\bsp\bsp.cpp" />
     <ClCompile Include="game\model\sourcemodel.cpp" />
@@ -226,7 +191,6 @@
     <ClCompile Include="game\rtech\assets\animseq.cpp" />
     <ClCompile Include="game\rtech\assets\animseq_data.cpp" />
     <ClCompile Include="game\rtech\assets\anim_recording.cpp" />
-    <ClCompile Include="game\rtech\assets\cube.cpp" />
     <ClCompile Include="game\rtech\assets\datatable.cpp" />
     <ClCompile Include="game\rtech\assets\effect.cpp" />
     <ClCompile Include="game\rtech\assets\impact.cpp" />
@@ -264,94 +228,69 @@
     <ClCompile Include="game\rtech\utils\studio\studio_r2.cpp" />
     <ClCompile Include="game\rtech\utils\studio\studio_r5.cpp" />
     <ClCompile Include="game\rtech\utils\utils.cpp" />
-    <ClCompile Include="game\vpk\vpk.cpp" />
+    <ClCompile Include="game\rtech\utils\zstd_loader.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="thirdparty\imgui\backends\imgui_impl_dx11.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="thirdparty\imgui\backends\imgui_impl_win32.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="thirdparty\imgui\imgui.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="thirdparty\imgui\imgui_demo.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="thirdparty\imgui\imgui_draw.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="thirdparty\imgui\imgui_tables.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="thirdparty\imgui\imgui_widgets.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="thirdparty\imgui\misc\cpp\imgui_stdlib.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="thirdparty\imgui\misc\imgui_editor.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">NotUsing</PrecompiledHeader>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="thirdparty\imgui\misc\imgui_logger.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">NotUsing</PrecompiledHeader>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="thirdparty\imgui\misc\imgui_utility.cpp" />
-    <ClCompile Include="thirdparty\miniaudio\miniaudio.c">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-    </ClCompile>
-    <ClCompile Include="thirdparty\rad_lzb_simple\rad_lzb_simple.c">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
@@ -361,7 +300,6 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="resources\icon.ico" />
-    <Image Include="resources\splashimage.bmp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
@@ -369,27 +307,20 @@
     <ProjectGuid>{db022a6b-c72e-47cb-bbad-d9a6ff3656c5}</ProjectGuid>
     <RootNamespace>rtechutils</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <VcpkgEnableManifest>false</VcpkgEnableManifest>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
     <EnableASAN>false</EnableASAN>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
-    <CharacterSet>MultiByte</CharacterSet>
-    <EnableASAN>false</EnableASAN>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
-    <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
     <EnableASAN>false</EnableASAN>
@@ -397,7 +328,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
     <EnableASAN>false</EnableASAN>
@@ -413,9 +344,6 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'" Label="PropertySheets">
-    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-  </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
@@ -423,48 +351,23 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>..\bin\$(Configuration)\</OutDir>
     <IntDir>..\build\$(Configuration)\$(ProjectName)\</IntDir>
-    <IncludePath>$(ProjectDir);$(ProjectDir)thirdparty\imgui\;$(ProjectDir)thirdparty\;$(IncludePath)</IncludePath>
-    <LibraryPath>$(ProjectDir);$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">
-    <OutDir>..\bin\$(Configuration)\</OutDir>
-    <IntDir>..\build\$(Configuration)\$(ProjectName)\</IntDir>
-    <IncludePath>$(ProjectDir);$(ProjectDir)thirdparty\imgui\;$(ProjectDir)thirdparty\;$(IncludePath)</IncludePath>
-    <LibraryPath>$(ProjectDir);$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
+    <IncludePath>$(ProjectDir);$(ProjectDir)thirdparty\imgui\;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">
     <OutDir>..\bin\$(Configuration)\</OutDir>
     <IntDir>..\build\$(Configuration)\$(ProjectName)\</IntDir>
-    <IncludePath>$(ProjectDir);$(ProjectDir)thirdparty\imgui\;$(ProjectDir)thirdparty\;$(IncludePath)</IncludePath>
-    <LibraryPath>$(ProjectDir);$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
+    <IncludePath>$(ProjectDir);$(ProjectDir)thirdparty\imgui\;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>..\bin\$(Configuration)\</OutDir>
     <IntDir>..\build\$(Configuration)\$(ProjectName)\</IntDir>
-    <IncludePath>$(ProjectDir);$(ProjectDir)thirdparty\imgui\;$(ProjectDir)thirdparty\;$(IncludePath)</IncludePath>
-    <LibraryPath>$(ProjectDir);$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
-  </PropertyGroup>
-  <PropertyGroup Label="Vcpkg">
-    <VcpkgEnableManifest>true</VcpkgEnableManifest>
-    <VcpkgApplocalDeps>false</VcpkgApplocalDeps>
-  </PropertyGroup>
-  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <VcpkgUseStatic>true</VcpkgUseStatic>
-    <VcpkgUseMD>true</VcpkgUseMD>
-  </PropertyGroup>
-  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <VcpkgUseStatic>true</VcpkgUseStatic>
-    <VcpkgUseMD>true</VcpkgUseMD>
-  </PropertyGroup>
-  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release_NoGui|x64'">
-    <VcpkgUseStatic>true</VcpkgUseStatic>
-    <VcpkgUseMD>true</VcpkgUseMD>
+    <IncludePath>$(ProjectDir);$(ProjectDir)thirdparty\imgui\;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>RADA_WRAP=UERA;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>RADA_WRAP=UERA;_DEBUG;_CONSOLE;ZSTD_DISABLE_DEPRECATE_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <TreatWarningAsError>true</TreatWarningAsError>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -475,7 +378,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;thirdparty\binka\binka_ue_decode_win64_static_x64D.lib;Crypt32.lib;Ws2_32.lib;Wldap32.lib;Secur32.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalOptions> /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
       <IgnoreAllDefaultLibraries>
       </IgnoreAllDefaultLibraries>
@@ -492,7 +395,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>RADA_WRAP=UERA;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>RADA_WRAP=UERA;NDEBUG;_CONSOLE;ZSTD_DISABLE_DEPRECATE_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <TreatWarningAsError>true</TreatWarningAsError>
@@ -509,44 +412,12 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;thirdparty\binka\binka_ue_decode_win64_static_x64D.lib;Crypt32.lib;Ws2_32.lib;Wldap32.lib;Secur32.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalOptions> /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
       <IgnoreSpecificDefaultLibraries>
       </IgnoreSpecificDefaultLibraries>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
-    </Link>
-    <PreBuildEvent>
-      <Command>powershell -ExecutionPolicy Bypass -File "$(SolutionDir)tools\prebuild.ps1" -projectDir $(ProjectDir)</Command>
-    </PreBuildEvent>
-  </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_CI|x64'">
-    <ClCompile>
-      <WarningLevel>Level4</WarningLevel>
-      <FunctionLevelLinking>true</FunctionLevelLinking>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>RADA_WRAP=UERA;NDEBUG;_CONSOLE;NO_LIBCURL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
-      <TreatWarningAsError>true</TreatWarningAsError>
-      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <PrecompiledHeader>Use</PrecompiledHeader>
-      <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
-      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
-      <StringPooling>true</StringPooling>
-      <RuntimeTypeInfo>false</RuntimeTypeInfo>
-    </ClCompile>
-    <Link>
-      <SubSystem>Windows</SubSystem>
-      <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <OptimizeReferences>true</OptimizeReferences>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;thirdparty\binka\binka_ue_decode_win64_static_x64D.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalOptions> /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
-      <IgnoreSpecificDefaultLibraries>
-      </IgnoreSpecificDefaultLibraries>
-      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <GenerateMapFile>true</GenerateMapFile>
     </Link>
     <PreBuildEvent>
       <Command>powershell -ExecutionPolicy Bypass -File "$(SolutionDir)tools\prebuild.ps1" -projectDir $(ProjectDir)</Command>
@@ -558,7 +429,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>RADA_WRAP=UERA;NDEBUG;_CONSOLE;BUILD_NOGUI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>RADA_WRAP=UERA;NDEBUG;_CONSOLE;BUILD_NOGUI;ZSTD_DISABLE_DEPRECATE_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <TreatWarningAsError>true</TreatWarningAsError>
@@ -575,7 +446,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>thirdparty\binka\binka_ue_decode_win64_static_x64D.lib;Crypt32.lib;Ws2_32.lib;Wldap32.lib;Secur32.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalOptions> /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
       <IgnoreSpecificDefaultLibraries>
       </IgnoreSpecificDefaultLibraries>

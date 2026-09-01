@@ -1,12 +1,15 @@
 #include <pch.h>
 #include <game/rtech/assets/ui_image_atlas.h>
 #include <game/rtech/assets/texture.h>
+#include <game/asset.h>
 
 #include <core/render/dx.h>
+#include <core/utils/fileio.h>
 #include <thirdparty/imgui/imgui.h>
 
 extern CDXParentHandler* g_dxHandler;
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
+extern CGlobalAssetData g_assetData;
 
 void LoadUIImageAtlasAsset(CAssetContainer* const pak, CAsset* const asset)
 {
@@ -42,8 +45,8 @@ void LoadUIImageAtlasAsset(CAssetContainer* const pak, CAsset* const asset)
 	{
 		UIAtlasImage img = {};
 
-        // [rika]: this should be used for preview
-        img.offsets = uiAsset->textureOffsets + i;
+        // [kral]: copy offset data so sorting doesn't invalidate pointers
+        img.offsets = uiAsset->textureOffsets[i];
 
         const UIImageAtlasDimension_t* const dimensions = uiAsset->textureDimensions + i;
         img.dimensionsWidth = dimensions->width;
@@ -123,17 +126,29 @@ void PostLoadUIImageAtlasAsset(CAssetContainer* const pak, CAsset* const asset)
     UIImageAtlasAsset* const uiAsset = reinterpret_cast<UIImageAtlasAsset*>(pakAsset->extraData());
 
     CPakAsset* const textureAsset = g_assetData.FindAssetByGUID<CPakAsset>(uiAsset->atlasGUID);
-    assertm(textureAsset, "Asset should be valid.");
+    if (!textureAsset)
+    {
+        printf("UI image atlas 0x%llX: atlas texture 0x%llX not found\n", pakAsset->data()->guid, uiAsset->atlasGUID);
+        pakAsset->SetAssetNameFromCache();
+        return;
+    }
 
     TextureAsset* const txtrAsset = reinterpret_cast<TextureAsset*>(textureAsset->extraData());
+    if (!txtrAsset)
+    {
+        printf("UI image atlas 0x%llX: atlas texture 0x%llX has no extra data\n", pakAsset->data()->guid, uiAsset->atlasGUID);
+        pakAsset->SetAssetNameFromCache();
+        return;
+    }
 
     if (txtrAsset->name)
     {
         std::string atlasName = "ui_image_atlas/" + std::string(txtrAsset->name) + ".rpak";
 
-        //assertm(pakAsset->data()->guid == RTech::StringToGuid(atlasName.c_str()), "hashed name for atlas did not match existing guid\n");
-
-        pakAsset->SetAssetName(atlasName, true);
+        if (pakAsset->data()->guid == RTech::StringToGuid(atlasName.c_str()))
+            pakAsset->SetAssetName(atlasName, true);
+        else
+            pakAsset->SetAssetNameFromCache();
     }
     else
     {
@@ -170,6 +185,10 @@ struct UITexturePreviewData_t
         TPC_Dimensions,
         TPC_Position,
         TPC_RenderSize,
+        TPC_OffsetData,
+        TPC_StartAnchor,
+        TPC_EndAnchor,
+        TPC_ScaleData,
         TPC_Name,
 
         _TPC_COUNT,
@@ -187,6 +206,9 @@ struct UITexturePreviewData_t
     // data used to render this image in game
     uint16_t renderWidth;
     uint16_t renderHeight;
+
+    // offset data
+    const UIImageAtlasOffset_t* offsets;
 
     const bool operator==(const UITexturePreviewData_t& in)
     {
@@ -304,6 +326,7 @@ void* PreviewUIImageAtlasAsset(CAsset* const asset, const bool firstFrameForAsse
             previewData.renderWidth = img.dimensionsWidth;
             previewData.renderHeight = img.dimensionsHeight;
 
+            previewData.offsets = &img.offsets;
             previewData.name = &img.path;
 
             index++;
@@ -329,7 +352,11 @@ void* PreviewUIImageAtlasAsset(CAsset* const asset, const bool firstFrameForAsse
         ImGui::TableSetupColumn("Index", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, 0.0f, UITexturePreviewData_t::eColumnID::TPC_Index);
         ImGui::TableSetupColumn("Dimensions", ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed, 0.0f, UITexturePreviewData_t::eColumnID::TPC_Dimensions);
         ImGui::TableSetupColumn("Positions", ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed, 0.0f, UITexturePreviewData_t::eColumnID::TPC_Position);
-        ImGui::TableSetupColumn("Render Size", ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed, 0.0f, UITexturePreviewData_t::eColumnID::TPC_Dimensions);
+        ImGui::TableSetupColumn("Render Size", ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed, 0.0f, UITexturePreviewData_t::eColumnID::TPC_RenderSize);
+        ImGui::TableSetupColumn("Crop Inset", ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed, 0.0f, UITexturePreviewData_t::eColumnID::TPC_OffsetData);
+        ImGui::TableSetupColumn("Start Anchor", ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed, 0.0f, UITexturePreviewData_t::eColumnID::TPC_StartAnchor);
+        ImGui::TableSetupColumn("End Anchor", ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed, 0.0f, UITexturePreviewData_t::eColumnID::TPC_EndAnchor);
+        ImGui::TableSetupColumn("Scale Ratio", ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed, 0.0f, UITexturePreviewData_t::eColumnID::TPC_ScaleData);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed, 0.0f, UITexturePreviewData_t::eColumnID::TPC_Name);
         ImGui::TableSetupScrollFreeze(1, 1);
 
@@ -377,6 +404,26 @@ void* PreviewUIImageAtlasAsset(CAsset* const asset, const bool firstFrameForAsse
             if (ImGui::TableSetColumnIndex(UITexturePreviewData_t::eColumnID::TPC_RenderSize))
             {
                 ImGui::Text("%i x %i", item->renderWidth, item->renderHeight);
+            }
+
+            if (ImGui::TableSetColumnIndex(UITexturePreviewData_t::eColumnID::TPC_OffsetData))
+            {
+                ImGui::Text("%.2f, %.2f", item->offsets->cropInsetLeft, item->offsets->cropInsetTop);
+            }
+
+            if (ImGui::TableSetColumnIndex(UITexturePreviewData_t::eColumnID::TPC_StartAnchor))
+            {
+                ImGui::Text("%.3f, %.3f", item->offsets->startAnchorX, item->offsets->startAnchorY);
+            }
+
+            if (ImGui::TableSetColumnIndex(UITexturePreviewData_t::eColumnID::TPC_EndAnchor))
+            {
+                ImGui::Text("%.3f, %.3f", item->offsets->endAnchorX, item->offsets->endAnchorY);
+            }
+
+            if (ImGui::TableSetColumnIndex(UITexturePreviewData_t::eColumnID::TPC_ScaleData))
+            {
+                ImGui::Text("%.3f, %.3f", item->offsets->scaleRatioX, item->offsets->scaleRatioY);
             }
 
             if (ImGui::TableSetColumnIndex(UITexturePreviewData_t::eColumnID::TPC_Name))
@@ -467,7 +514,7 @@ enum eUIImageAtlasExportSetting
     PNG_T,  // PNG (Textures)
     DDS_AT, // DDS (Atlas)
     DDS_T,  // DDS (Textures)
-    META_J, // Metadata (JSON)
+    JSON_AT, // JSON (Atlas Data)
 };
 
 //static_assert(s_AssetTypePaths.count(PakAssetType_t::UIMG));
@@ -478,11 +525,11 @@ bool ExportUIImageAtlasAsset(CAsset* const asset, const int setting)
     UIImageAtlasAsset* const uiAsset = reinterpret_cast<UIImageAtlasAsset*>(pakAsset->extraData());
 
     // Create exported path + asset path.
-    std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+    std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
     const std::filesystem::path atlasPath(asset->GetAssetName());
 
     // truncate paths?
-    if (g_rsxSettings.exportPathsFull)
+    if (g_ExportSettings.exportPathsFull)
         exportPath.append(atlasPath.parent_path().string());
     else
         exportPath.append(s_PathPrefixUIMG);
@@ -606,62 +653,144 @@ bool ExportUIImageAtlasAsset(CAsset* const asset, const int setting)
 
         return true;
     }
-    case eUIImageAtlasExportSetting::META_J:
+    case eUIImageAtlasExportSetting::JSON_AT:
     {
-        // Add dds for file extension.
-        exportPath.replace_extension("json");
-
-        std::string jsonData;
-
-        jsonData += "{\n"
-                    "\t\"atlas\": \"" + atlasPath.stem().string() + "\",\n"
-                    "\t\"unkCount\": " + std::to_string(uiAsset->unkCount) + ",\n"
-                    "\t\"images\": [\n";
-
-        for (auto& it : uiAsset->imageArray)
+        // Helper to escape strings for JSON output
+        auto JsonEscape = [](const std::string& s) -> std::string
         {
-            // One final image always exists to preview the entire atlas in one go. We don't want it here.
-            if (!it.offsets)
+            std::string escaped;
+            escaped.reserve(s.size() + s.size() / 5); // Reserve ~1.2x space
+
+            for (char c : s)
             {
-                // this is quite bad, but we need to remove the last two characters so we can get rid of the
-                // comma from the final object in the array
-                jsonData.pop_back(); // '\n'
-                jsonData.pop_back(); // ','
+                switch (c)
+                {
+                case '"':  escaped += "\\\""; break;
+                case '\\': escaped += "\\\\"; break;
+                case '\b': escaped += "\\b"; break;
+                case '\f': escaped += "\\f"; break;
+                case '\n': escaped += "\\n"; break;
+                case '\r': escaped += "\\r"; break;
+                case '\t': escaped += "\\t"; break;
+                default:
+                    // Control characters and non-ASCII
+                    if (c < 0x20)
+                    {
+                        char buf[7];
+                        snprintf(buf, sizeof(buf), "\\u%04x", (unsigned char)c);
+                        escaped += buf;
+                    }
+                    else
+                    {
+                        escaped += c;
+                    }
+                    break;
+                }
+            }
+            return escaped;
+        };
 
-                // Get our newline back!
-                jsonData += "\n";
-                continue;
+        // Helper to sanitize float values for JSON output
+        // Only handles truly invalid values (inf, -inf, nan) which are not valid JSON
+        // Returns a string to preserve negative zero (-0) as a string literal
+        auto SanitizeFloat = [](float f) -> std::string
+        {
+            if (!isfinite(f))
+                return "0";  // inf, -inf, nan become 0
+            // Check for negative zero - return as string literal to preserve it
+            if (f == 0.0f)
+            {
+                uint32_t bits;
+                std::memcpy(&bits, &f, sizeof(bits));
+                if (bits & 0x80000000)
+                    return "\"-0\"";  // negative zero as string
+                return "0";
+            }
+            std::ostringstream ss;
+            ss << f;
+            return ss.str();
+        };
 
+        // Build JSON atlas data export
+        std::stringstream json;
+
+        // Get atlas texture path
+        std::string atlasTexturePath;
+        CPakAsset* const textureAsset = g_assetData.FindAssetByGUID<CPakAsset>(uiAsset->atlasGUID);
+        if (textureAsset)
+        {
+            TextureAsset* const txtrAsset = reinterpret_cast<TextureAsset*>(textureAsset->extraData());
+            if (txtrAsset && txtrAsset->name)
+            {
+                atlasTexturePath = std::format("texture/{}", txtrAsset->name);
+            }
+            else
+            {
+                atlasTexturePath = textureAsset->GetAssetName();
+            }
+        }
+        else
+        {
+            atlasTexturePath = "unknown";
+        }
+
+        json << "{\n";
+        json << "  \"_type\": \"uimg\",\n";
+        json << "  \"_path\": \"" << JsonEscape(asset->GetAssetName()) << "\",\n";
+        json << "  \"atlas\": \"" << JsonEscape(atlasTexturePath) << "\",\n";
+        json << "  \"images\": [\n";
+
+        // Export all images except the last one (which is the root atlas texture)
+        bool firstImage = true;
+        for (auto it = uiAsset->imageArray.rbegin() + 1; it != uiAsset->imageArray.rend(); ++it)
+        {
+            const UIImageAtlasOffset_t& offset = it->offsets;
+
+            // Add comma before image if not the first one
+            if (!firstImage)
+                json << ",\n";
+            firstImage = false;
+
+            json << "    {\n";
+            json << "      \"path\": \"" << JsonEscape(it->path) << "\",\n";
+            json << "      \"posX\": " << it->posX << ",\n";
+            json << "      \"posY\": " << it->posY << ",\n";
+            json << "      \"width\": " << it->width << ",\n";
+            json << "      \"height\": " << it->height << ",\n";
+
+            // Export renderWidth/renderHeight if they differ from the actual slice size
+            if (it->dimensionsWidth != it->width || it->dimensionsHeight != it->height)
+            {
+                json << "      \"renderWidth\": " << it->dimensionsWidth << ",\n";
+                json << "      \"renderHeight\": " << it->dimensionsHeight << ",\n";
             }
 
-            jsonData += "\t\t{\n"
-                "\t\t\t\"path\": \"" + it.path + "\",\n"
-                "\t\t\t\"width\": " + std::to_string(it.width) + ",\n"
-                "\t\t\t\"height\": " + std::to_string(it.height) + ",\n"
-                "\t\t\t\"posX\": " + std::to_string(it.posX) + ",\n"
-                "\t\t\t\"posY\": " + std::to_string(it.posY) + ",\n"
-                "\t\t\t\"cropInsetLeft\": " + std::to_string(it.offsets->cropInsetLeft) + ",\n"
-                "\t\t\t\"cropInsetTop\": " + std::to_string(it.offsets->cropInsetTop) + ",\n"
-                "\t\t\t\"endAnchorX\": " + std::to_string(it.offsets->endAnchorX) + ",\n"
-                "\t\t\t\"endAnchorY\": " + std::to_string(it.offsets->endAnchorY) + ",\n"
-                "\t\t\t\"startAnchorX\": " + std::to_string(it.offsets->startAnchorX) + ",\n"
-                "\t\t\t\"startAnchorY\": " + std::to_string(it.offsets->startAnchorY) + ",\n"
-                "\t\t\t\"scaleRatioX\": " + std::to_string(it.offsets->scaleRatioX) + ",\n"
-                "\t\t\t\"scaleRatioY\": " + std::to_string(it.offsets->scaleRatioY) + "\n"
-                "\t\t},\n";
+            json << "      \"cropInsetLeft\": " << SanitizeFloat(offset.cropInsetLeft) << ",\n";
+            json << "      \"cropInsetTop\": " << SanitizeFloat(offset.cropInsetTop) << ",\n";
+            json << "      \"startAnchorX\": " << SanitizeFloat(offset.startAnchorX) << ",\n";
+            json << "      \"startAnchorY\": " << SanitizeFloat(offset.startAnchorY) << ",\n";
+            json << "      \"endAnchorX\": " << SanitizeFloat(offset.endAnchorX) << ",\n";
+            json << "      \"endAnchorY\": " << SanitizeFloat(offset.endAnchorY) << ",\n";
+            json << "      \"scaleRatioX\": " << SanitizeFloat(offset.scaleRatioX) << ",\n";
+            json << "      \"scaleRatioY\": " << SanitizeFloat(offset.scaleRatioY) << "\n";
+            json << "    }";
         }
-        jsonData += "\t]\n}";
 
-        StreamIO out;
-        if (!out.open(exportPath.string(), eStreamIOMode::Write))
+        json << "\n  ]\n";
+        json << "}\n";
+
+        exportPath.replace_extension("json");
+
+        StreamIO jsonIO;
+        if (!jsonIO.open(exportPath.string(), eStreamIOMode::Write))
         {
-            assertm(false, "Failed to open file for write.");
+            assertm(false, "Failed to open JSON file for write.");
             return false;
         }
 
-        out.write(jsonData.c_str(), jsonData.length());
+        std::string jsonStr = json.str();
+        jsonIO.write(jsonStr.c_str(), jsonStr.length());
 
-        out.close();
         return true;
     }
     default:
@@ -676,7 +805,7 @@ bool ExportUIImageAtlasAsset(CAsset* const asset, const int setting)
 
 void InitUIImageAtlasAssetType()
 {
-    static const char* settings[] = { "PNG (Atlas)", "PNG (Textures)", "DDS (Atlas)", "DDS (Textures)", "Metadata (JSON)"};
+    static const char* settings[] = { "PNG (Atlas)", "PNG (Textures)", "DDS (Atlas)", "DDS (Textures)", "JSON (Atlas Data)" };
     AssetTypeBinding_t type =
     {
         .name = "UI Image Atlas",

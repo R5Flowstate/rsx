@@ -1,7 +1,6 @@
 #pragma once
 #include <d3d11.h>
 #include <core/render/preview/lighting.h>
-#include <core/render/preview/grid.h>
 
 // Class to hold information related to the general render scene.
 // Not directly related to any individual type of preview/render setup.
@@ -17,8 +16,6 @@ public:
 
 	ID3D11Buffer* cubemapSamplesBuffer;
 	ID3D11ShaderResourceView* cubemapSamplesSRV;
-
-	PreviewGrid_t<6, 2> previewGrid;
 
 	std::vector<HardwareLight> globalLights;
 	std::vector<float> cubemapSamples;

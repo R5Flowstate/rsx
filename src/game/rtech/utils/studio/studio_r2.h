@@ -417,7 +417,7 @@ namespace r2
 	#define STUDIO_AL_LOCAL		0x1000		// layer is a local context sequence
 	#define STUDIO_AL_2000		0x2000		// skips parsing in AddSequenceLayer and AddLocalLayer if set
 	#define STUDIO_AL_POSE		0x4000		// layer blends using a pose parameter instead of parent cycle
-	#define STUDIO_AL_REALTIME	0x8000		// treats the layer sequence as if it uses STUDIO_REALTIME (sub_1401D9AD0 in R5pc_r5launch_N1094_CL456479_2019_10_30_05_20_PM)
+	#define STUDIO_AL_REALTIME	0x8000		// treats the layer sequence as if it uses STUDIO_REALTIME
 
 	struct mstudioautolayer_t
 	{

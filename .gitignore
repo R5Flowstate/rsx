@@ -20,8 +20,6 @@ mono_crash.*
 [Dd]ebug/
 [Dd]ebugPublic/
 [Rr]elease/
-[Rr]elease_CI/
-[Rr]elease_NoGui/
 [Rr]eleases/
 [Pp]rofile/
 x64/
@@ -361,8 +359,12 @@ rsx_cache_db.bin
 
 # Misc
 *.json
-!vcpkg*.json
-radaudio.lib
-binka_ue_decode_*.lib
+*.tlog
+/build/Release_NoGui/rsx
 
-vcpkg_installed/*
+# vcpkg manifest installed dependencies
+vcpkg_installed/
+
+# cafe export scratch (kept local/archived, not committed)
+_se_*
+_se_out/

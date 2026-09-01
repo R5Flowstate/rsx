@@ -10,7 +10,7 @@
 #include <thirdparty/imgui/misc/imgui_utility.h>
 
 extern CBufferManager g_BufferManager;
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 // get the used material indices for skins
 // todo: move to qc
@@ -167,7 +167,7 @@ void QC_ParseStudioHeader(qc::QCFile* const qc, const ModelParsedData_t* const p
 		const char** materialFullPaths = nullptr;
 
 		// if we are going to rename materials
-		if (g_rsxSettings.exportModelMatsTruncated)
+		if (g_ExportSettings.exportModelMatsTruncated)
 		{
 			materialFullPaths = new const char* [pStudioHdr->numSkinRef] {};
 		}
@@ -177,13 +177,13 @@ void QC_ParseStudioHeader(qc::QCFile* const qc, const ModelParsedData_t* const p
 			materials[i] = parsedData->pMaterial(i)->GetName(true);
 
 			// are the materials getting shortened ?
-			if (!g_rsxSettings.exportModelMatsTruncated)
+			if (!g_ExportSettings.exportModelMatsTruncated)
 				continue;
 
 			assertm(materialFullPaths, "material path array was not allocated");
 
 			materialFullPaths[i] = materials[i];
-			materials[i] = GetStringAfterLastSlash(materials[i]);
+			materials[i] = keepAfterLastSlashOrBackslash(materials[i]);
 		}
 
 		if (pStudioHdr->numSkinFamilies > 1)
@@ -211,7 +211,7 @@ void QC_ParseStudioHeader(qc::QCFile* const qc, const ModelParsedData_t* const p
 			FreeAllocArray(names);
 		}
 
-		if (g_rsxSettings.exportModelMatsTruncated)
+		if (g_ExportSettings.exportModelMatsTruncated)
 		{
 			for (int i = 0; i < pStudioHdr->numSkinRef; i++)
 			{
@@ -1060,7 +1060,32 @@ void QC_ParseStudioWeightList(qc::QCFile* const file, const ModelParsedData_t* c
 void FormNameAnim(char* const buf, const size_t size, const char* const stem, const char* const name, const int format)
 {
 	assertm(strnlen_s(name, MAX_PATH) < (size - 16ull), "big animation name");
-	snprintf(buf, size, "anims_%s/%s%s", stem, name, s_ModelExportExtensions[format]);
+
+	// Map animseq export setting to appropriate extension
+	const char* extension = ".smd";  // Default to SMD for QC
+
+	switch (format)
+	{
+	case 0: // ANIMSEQ_CAST
+		extension = ".cast";
+		break;
+	case 1: // ANIMSEQ_RMAX
+		extension = ".rmax";
+		break;
+	case 2: // ANIMSEQ_RSEQ
+		extension = ".rseq";
+		break;
+	case 3: // ANIMSEQ_SMD
+		extension = ".smd";
+		break;
+	default:
+		// For model export settings, use the extension array
+		if (format >= 0 && format < 6)
+			extension = s_ModelExportExtensions[format];
+		break;
+	}
+
+	snprintf(buf, size, "anims_%s/%s%s", stem, name, extension);
 }
 
 void QC_ParseStudioAnimation(qc::QCFile* const file, const ModelParsedData_t* const parsedData, const ModelAnimInfo_t* const info, const char* const stem, const int setting)
@@ -1120,7 +1145,7 @@ void QC_ParseStudioSequence(qc::QCFile* const file, const ModelParsedData_t* con
 	const ModelSeq_t* const seq = info->seq;
 
 	char tmpName[MAX_PATH]{};
-	strncpy_mem(tmpName, MAX_PATH, GetStringAfterLastSlash(seq->szlabel), MAX_PATH);
+	strncpy_mem(tmpName, MAX_PATH, keepAfterLastSlashOrBackslash(seq->szlabel), MAX_PATH);
 	removeExtension(tmpName);
 
 	const char* const label = file->WriteString(tmpName);
@@ -1277,7 +1302,7 @@ void QC_ParseStudioSequence(qc::QCFile* const file, const ModelParsedData_t* con
 					continue;
 				}
 
-				strncpy_mem(tmpName, MAX_PATH, GetStringAfterLastSlash(animSeq->seqdesc.szlabel), MAX_PATH);
+				strncpy_mem(tmpName, MAX_PATH, keepAfterLastSlashOrBackslash(animSeq->seqdesc.szlabel), MAX_PATH);
 				removeExtension(tmpName);
 
 
@@ -1549,11 +1574,11 @@ bool ExportModelQC(const ModelParsedData_t* const parsedData, std::filesystem::p
 
 	// get version from settings
 	Version_t qcTargetVersion;
-	qcTargetVersion.SetVersion(static_cast<MajorVersion_t>(g_rsxSettings.qcMajorVersion), g_rsxSettings.qcMinorVersion);
+	qcTargetVersion.SetVersion(static_cast<MajorVersion_t>(g_ExportSettings.qcMajorVersion), g_ExportSettings.qcMinorVersion);
 
 	// export qc file
 	QCFile::SetExportVersion(qcTargetVersion);
-	qcFile.ParseToText(g_rsxSettings.exportQCIFiles);
+	qcFile.ParseToText(g_ExportSettings.exportQCIFiles);
 
 	g_BufferManager.RelieveBuffer(buf);
 #else
@@ -1599,6 +1624,12 @@ bool ExportSeqQC(const ModelParsedData_t* const parsedData, const ModelSeq_t* co
 	seqInfo.seq = sequence;
 	seqInfo.blends = reinterpret_cast<int* const>(qcFile.ReserveData(sizeof(int) * sequence->AnimCount()));
 
+	// Initialize blend indices
+	for (int i = 0; i < sequence->AnimCount(); i++)
+	{
+		seqInfo.blends[i] = i;
+	}
+
 	ModelAnimInfo_t* const animInfo = reinterpret_cast<ModelAnimInfo_t* const>(qcFile.ReserveData(sizeof(ModelAnimInfo_t) * sequence->AnimCount()));
 
 	for (int i = 0; i < sequence->AnimCount(); i++)
@@ -1613,11 +1644,11 @@ bool ExportSeqQC(const ModelParsedData_t* const parsedData, const ModelSeq_t* co
 
 	// get version from settings
 	Version_t qcTargetVersion;
-	qcTargetVersion.SetVersion(static_cast<MajorVersion_t>(g_rsxSettings.qcMajorVersion), g_rsxSettings.qcMinorVersion);
+	qcTargetVersion.SetVersion(static_cast<MajorVersion_t>(g_ExportSettings.qcMajorVersion), g_ExportSettings.qcMinorVersion);
 
 	// export qc file
 	QCFile::SetExportVersion(qcTargetVersion);
-	qcFile.ParseToText(g_rsxSettings.exportQCIFiles);
+	qcFile.ParseToText(g_ExportSettings.exportQCIFiles);
 
 	g_BufferManager.RelieveBuffer(buf);
 

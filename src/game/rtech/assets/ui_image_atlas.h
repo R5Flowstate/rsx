@@ -93,8 +93,8 @@ struct UIAtlasImage
 	uint16_t dimensionsWidth;
 	uint16_t dimensionsHeight;
 
-	// store these as a ptr to save size
-	const UIImageAtlasOffset_t* offsets;
+	// store offset data by value so sorting doesn't invalidate pointers
+	UIImageAtlasOffset_t offsets;
 	const UIImageAtlasBounds_t* bounds;
 };
 

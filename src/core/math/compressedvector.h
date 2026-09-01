@@ -387,7 +387,7 @@ public:
 	};
 
 	inline const uint32_t PackedValue() const { return packedValue; };
-	inline void UnpackNormal(Vector& out, Vector& tangent) const; // we need tangent too!
+	inline void UnpackNormal(Vector& out) const; // we need tangent too!
 	inline void PackNormal(const Vector& normal, const Vector4D& tangent);
 
 	inline Normal32& operator=(const Normal32& nml);
@@ -397,7 +397,7 @@ private:
 };
 
 // tangent unpack
-void Normal32::UnpackNormal(Vector& out, Vector& /*tangent*/) const
+void Normal32::UnpackNormal(Vector& out) const
 {
 	// check sign bit on first component
 	bool sign = (packedValue >> 28) & 1;
@@ -416,68 +416,6 @@ void Normal32::UnpackNormal(Vector& out, Vector& /*tangent*/) const
 	out[idx1] = val1 * normalised;
 	out[idx2] = val2 * normalised;
 	out[idx3] = val3 * normalised;
-
-	//float r2y = 1 + out.z;
-	//r2y = 1.f / r2y;
-	//float r2z = -r2y * out.x;
-	//float r2w = out.y * out.y;
-	//float r3x = r2z * out.y;
-	//float r4x = -r2y * r2w + 1;
-	//float r4y = -out.x;
-	//float r4z = -out.y;
-	//float r3z = r2z * out.x + 1;
-	//float r3y;
-	//float r3w = r4y;
-
-	//Vector r2;
-	//if (out.z < -0.999899983)
-	//{
-	//	r2.x = 0;
-	//	r2.y = -1;
-	//	r2.z = 0;
-	//}
-	//else
-	//{
-	//	r2.x = r3z;
-	//	r2.y = r3x;
-	//	r2.z = r3w;
-	//}
-
-	//Vector r3;
-	//float r4w = r3x;
-	//if (out.z < -0.999899983f)
-	//{
-	//	r3.x = -1;
-	//	r3.y = 0;
-	//	r3.z = 0;
-	//}
-	//else
-	//{
-	//	r3.x = r4w;
-	//	r3.y = r4x;
-	//	r3.z = r4z;
-	//}
-
-	//float x = (packedValue & 1023) * 0.00614192151f;
-	//float r2x = sin(x);
-	//r4x = cos(x);
-
-	//r3x *= r2x;
-	//r3y *= r2x;
-	//r3z *= r2x;
-
-	//r2x = r2y * r4x + r3x;
-	//r2y = r2z * r4x + r3y;
-	//r2z = r2w * r4x + r3z;
-
-	//// normalizing
-	//float r1w = r2x * r2x + r2y * r2y + r2z * r2z;
-	//r1w = 1.f / sqrt(r1w);
-	//r2x *= r1w;
-	//r2y *= r1w;
-	//r2z *= r1w;
-
-	//tangent = Vector(r2x, r2y, r2z);
 }
 
 // https://github.com/r-ex/rmdlconv/blob/a0bf7044e9942a0d579c89c092996a1f8a3a7d6a/rmdlconv/mdl/studio.cpp#L93

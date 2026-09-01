@@ -1,11 +1,14 @@
 #pragma once
 
+#include <cassert>
+#include <cstring>
+#include <vector>
+
 class CCommandLine
 {
 public:
-	CCommandLine(int _argc, char* _argv[]) : argc((uint32_t)_argc), argv(_argv)
+	CCommandLine(const int argc, char* argv[]) : argc(argc), argv(argv)
 	{
-		assert(_argc >= 0);
 	};
 
 	const char* const GetSelfPath() const
@@ -17,7 +20,7 @@ public:
 	const bool HasParam(const char* const param) const
 	{
 		assert(param);
-		for (uint32_t i = 1; i < argc; ++i)
+		for (int i = 1; i < argc; ++i)
 		{
 			if (strcmp(argv[i], param) == 0)
 			{
@@ -28,10 +31,10 @@ public:
 		return false;
 	}
 
-	const uint32_t GetParamIdx(const char* const param) const
+	const int GetParamIdx(const char* const param) const
 	{
 		assert(param);
-		for (uint32_t i = 1; i < argc; ++i)
+		for (int i = 1; i < argc; ++i)
 		{
 			if (strcmp(argv[i], param) == 0)
 			{
@@ -39,35 +42,35 @@ public:
 			}
 		}
 
-		return UINT32_MAX;
+		return -1;
 	}
 
 	const char* const GetParamValue(const char* const param) const
 	{
 		assert(param);
-		const uint32_t idx = GetParamIdx(param);
-		return (idx != UINT32_MAX && idx != argc-1) ? GetParamValue(idx+1) : nullptr;
+		const int idx = GetParamIdx(param);
+		return (idx != -1 && idx != argc-1) ? GetParamValue(idx+1) : nullptr;
 	}
 
-	const char* const GetParamValue(const uint32_t idx) const
+	const char* const GetParamValue(const int idx) const
 	{
 		if (idx < 0 || idx >= argc)
 		{
-			assertm(false, "range check failure");
+			assert(false && "range check failure");
 			return nullptr;
 		}
 
 		return argv[idx];
 	}
 
-	inline uint32_t GetArgC() const
+	inline const int GetArgC() const
 	{
 		return argc;
 	}
 
-	inline uint32_t GetFirstNonFlagArgIdx() const
+	inline const int GetFirstNonFlagArgIdx() const
 	{
-		uint32_t i = 1;
+		int i = 1;
 		// Skip the first argument, as it's always our own executable path
 		for (i = 1; i < argc; ++i)
 		{
@@ -90,9 +93,8 @@ public:
 	}
 
 private:
-	uint32_t argc;
+	int argc;
 	char** argv;
 };
 
-std::unordered_set<uint32_t> CLI_GetCommaSeparatedAssetTypes(const CCommandLine* const cli, const char* const paramName);
-void GetTextFilterForExport(const char* filterString, TextFilter* filter);
+std::vector<uint32_t> GetExportFilterTypes(const CCommandLine* const cli);

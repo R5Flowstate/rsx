@@ -34,8 +34,8 @@ void GetShadersForVertexLump(int vertexType, CShader** vertexShaderOut, CShader*
 		inputElements[2] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 		inputElements[3] = { "UNK",      0, DXGI_FORMAT_R32_UINT,        0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 
-		vertexShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/vertexLitFlat_vs", s_VertexLitFlatShader, eShaderType::Vertex, inputElements, numElements);
-		pixelShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/bsp_ps", s_BSPPixelShader, eShaderType::Pixel);
+		vertexShader = g_dxHandler->GetShaderManager()->LoadShader("shaders/vertexLitFlat_vs", eShaderType::Vertex, false);
+		pixelShader = g_dxHandler->GetShaderManager()->LoadShader("shaders/bsp_ps", eShaderType::Pixel, false);
 
 		break;
 	}
@@ -66,8 +66,8 @@ void GetShadersForVertexLump(int vertexType, CShader** vertexShaderOut, CShader*
 		inputElements[4] = { "TEXCOORD",  1, DXGI_FORMAT_R32G32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 		inputElements[5] = { "UNK",       0, DXGI_FORMAT_R32_UINT,        0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 
-		vertexShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/vertexLitBump_vs", s_VertexLitBumpShader, eShaderType::Vertex, inputElements, numElements);
-		pixelShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/bsp_ps", s_BSPPixelShader, eShaderType::Pixel);
+		vertexShader = g_dxHandler->GetShaderManager()->LoadShader("shaders/vertexLitBump_vs", eShaderType::Vertex, false);
+		pixelShader = g_dxHandler->GetShaderManager()->LoadShader("shaders/bsp_ps", eShaderType::Pixel, false);
 
 		break;
 	}
@@ -87,8 +87,8 @@ void GetShadersForVertexLump(int vertexType, CShader** vertexShaderOut, CShader*
 		inputElements[2] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 		inputElements[3] = { "UNK",      0, DXGI_FORMAT_R32_UINT,        0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 
-		vertexShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/vertexLitFlat_vs", s_VertexLitFlatShader, eShaderType::Vertex, inputElements, numElements);
-		pixelShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/bsp_ps", s_BSPPixelShader, eShaderType::Pixel);
+		vertexShader = g_dxHandler->GetShaderManager()->LoadShader("shaders/vertexLitFlat_vs", eShaderType::Vertex, false);
+		pixelShader = g_dxHandler->GetShaderManager()->LoadShader("shaders/bsp_ps", eShaderType::Pixel, false);
 
 		break;
 	}
@@ -108,22 +108,34 @@ void GetShadersForVertexLump(int vertexType, CShader** vertexShaderOut, CShader*
 		inputElements[2] = { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 		inputElements[3] = { "UNK",      0, DXGI_FORMAT_R32G32_UINT,        0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 
-		vertexShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/vertexUnlitTS_vs", s_VertexUnlitTSShader, eShaderType::Vertex, inputElements, numElements);
-		pixelShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/bsp_ps", s_BSPPixelShader, eShaderType::Pixel);
+		vertexShader = g_dxHandler->GetShaderManager()->LoadShader("shaders/vertexUnlitTS_vs", eShaderType::Vertex, false);
+		pixelShader = g_dxHandler->GetShaderManager()->LoadShader("shaders/bsp_ps", eShaderType::Pixel, false);
 
 		break;
 	}
 	}
 
-	assert(vertexShader->GetInputLayout());
-	
+	if (!vertexShader->GetInputLayout())
+	{
+		ID3D11InputLayout* inputLayout = nullptr;
+
+		const HRESULT hr = g_dxHandler->GetDevice()->CreateInputLayout(
+			inputElements, numElements,
+			vertexShader->GetBytecodeBlob()->GetBufferPointer(),
+			vertexShader->GetBytecodeBlob()->GetBufferSize(),
+			&inputLayout);
+		UNUSED(hr);
+		assert(SUCCEEDED(hr));
+
+		vertexShader->SetInputLayout(inputLayout);
+	}
+
 	*vertexShaderOut = vertexShader;
 	*pixelShaderOut = pixelShader;
 
 	delete[] inputElements;
 }
 
-// teehee: (20 + (0x40c >> (4 * (lumpId & 3)) & 0xF));
 UINT GetVertexStrideByLumpId(int lumpId)
 {
 	switch (lumpId)
@@ -250,11 +262,7 @@ void CBSPData::CreateOrUpdatePreviewStructuredBuffers()
 	if (m_vertPositionsBuffer)
 	{
 		D3D11_MAPPED_SUBRESOURCE resource;
-		const HRESULT hr = ctx->Map(this->m_vertPositionsBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &resource);
-
-		if (!SUCCEEDED(hr))
-			return;
-		assert(SUCCEEDED(hr));
+		assert(SUCCEEDED(ctx->Map(this->m_vertPositionsBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &resource)));
 
 		memcpy(resource.pData, GetLumpData(LUMP_VERTEXES).get(), vertPositionsLumpSize);
 
@@ -264,12 +272,7 @@ void CBSPData::CreateOrUpdatePreviewStructuredBuffers()
 	if (m_vertNormalsBuffer)
 	{
 		D3D11_MAPPED_SUBRESOURCE resource;
-		const HRESULT hr = ctx->Map(this->m_vertNormalsBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &resource);
-
-		if (!SUCCEEDED(hr))
-			return;
-
-		assert(SUCCEEDED(hr));
+		assert(SUCCEEDED(ctx->Map(this->m_vertNormalsBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &resource)));
 
 		memcpy(resource.pData, GetLumpData(LUMP_VERTNORMALS).get(), vertNormalsLumpSize);
 
@@ -297,12 +300,13 @@ void CBSPData::PopulateFromPakAsset(CPakAsset* pakAsset, void* bspData)
 				m_lumpSizes[i] = header->lumps[i].filelen;
 
 				const std::string lumpAssetName = std::format("maps/{}.bsp.{:04X}.bsp_lump.client", m_mapName, i);
-				CAsset* lumpAsset = g_assetData.FindAsset(lumpAssetName);
+				const uint64_t lumpAssetGuid = RTech::StringToGuid(lumpAssetName.c_str());
+				CAsset* lumpAsset = g_assetData.FindAssetByGUID(lumpAssetGuid);
 
 				if (lumpAsset)
 					SetLumpData(i, GetWrapAssetData(lumpAsset, nullptr));
 				else
-					Log("BSP: Map %s expected lump ID %04X (%s) to exist, but no lump could be found. Are we missing a file?\n", m_mapName.c_str(), i, s_LumpNames[(lumptype_e)i]);
+					printf("no asset %s?\n", lumpAssetName.c_str());
 			}
 		}
 	}
@@ -359,8 +363,6 @@ CDXDrawData* CBSPData::ConstructPreviewData()
 	if (!m_drawData)
 	{
 		m_drawData = new CDXDrawData();
-
-		m_drawData->dataType = CDXDrawData::DrawDataType_e::MODEL;
 
 		//CreateOrUpdatePreviewStructuredBuffers();
 
@@ -444,13 +446,12 @@ CDXDrawData* CBSPData::ConstructPreviewData()
 				if (mesh->triCount <= 0)
 					continue;
 
-				DXMeshDrawData_t meshDrawData = {};
+				DXMeshDrawData_t meshDrawData;
 				meshDrawData.indexFormat = DXGI_FORMAT_R32_UINT;
 
 				meshDrawData.doFrustumCulling = true;
 				meshDrawData.modelMins = model->mins;
 				meshDrawData.modelMaxs = model->maxs;
-				meshDrawData.visible = true;
 
 				const dmaterialsort_t* mtlSort = &materialLumpData[mesh->mtlSortIdx];
 
@@ -505,7 +506,7 @@ CDXDrawData* CBSPData::ConstructPreviewData()
 				std::string materialName = &texStringLumpData[tex.nameStringTableID];
 				materialName = "material/" + materialName + "_wldc.rpak";
 
-				CAsset* materialAsset = g_assetData.FindAsset(materialName);
+				CAsset* materialAsset = g_assetData.FindAssetByGUID(RTech::StringToGuid(materialName.c_str()));
 				if (materialAsset)
 				{
 					CPakAsset* matlPakAsset = reinterpret_cast<CPakAsset*>(materialAsset);

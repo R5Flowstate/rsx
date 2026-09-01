@@ -5,7 +5,6 @@
 #include <thirdparty/imgui/backends/imgui_impl_win32.h>
 
 #include <core/window.h>
-#include <core/render/preview/preview.h>
 
 #include <thirdparty/directxtex/DirectXTex.h>
 
@@ -363,41 +362,21 @@ void CDXCamera::AddRotation(float yaw, float pitch, float roll)
     if (rotation.y < (-XM_PI))
         rotation.y += 2.f * XM_PI;
 
-    rotation.x += pitch;
-
-    // when this is clamped to 90 degrees, the view flips when it hits 90
-    // if it's 89.5 the bug doesn't happen. i dont know how to fix it right now so i'm just going to leave it like this for now
-    rotation.x = std::clamp(rotation.x + pitch, -DEG2RAD(89.5f), DEG2RAD(89.5f));
+    rotation.x = std::clamp(rotation.x + pitch, -DEG2RAD(90), DEG2RAD(90));
 
     rotation.z += roll;
 }
 
-// first-person
-//XMMATRIX CDXCamera::GetViewMatrix()
-//{
-//    const XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(rotation.x, rotation.y, rotation.z);
-//
-//    target = XMVector3TransformCoord(XMVectorSet(0, 0, 1, 0), rotMatrix);
-//    up = XMVector3TransformCoord(XMVectorSet(0, 1, 0, 0), rotMatrix);
-//
-//    target = position.AsXMVector() + target;
-//
-//    return XMMatrixLookAtLH(position.AsXMVector(), target, up);
-//}
-
 XMMATRIX CDXCamera::GetViewMatrix()
 {
-    Vector ttarget = { 0,0,0 };
-    XMVECTOR cameraPos = XMVectorSet(
-        ttarget.x + distanceToPivot * cosf(rotation.x) * sinf(rotation.y),
-        ttarget.y + distanceToPivot * sinf(rotation.x),
-        ttarget.z + distanceToPivot * cosf(rotation.x) * cosf(rotation.y),
-        0.0f
-    );
-    XMVECTOR focusPos = XMVectorSet(ttarget.x, ttarget.y, ttarget.z, 0.0f);
-    XMVECTOR upDir = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f); // Constant up
+    const XMMATRIX rotMatrix = XMMatrixRotationRollPitchYaw(rotation.x, rotation.y, rotation.z);
 
-    return XMMatrixLookAtLH(cameraPos, focusPos, upDir);
+    target = XMVector3TransformCoord(XMVectorSet(0, 0, 1, 0), rotMatrix);
+    up = XMVector3TransformCoord(XMVectorSet(0, 1, 0, 0), rotMatrix);
+
+    target = position.AsXMVector() + target;
+
+    return XMMatrixLookAtLH(position.AsXMVector(), target, up);
 }
 
 bool CDXParentHandler::SetupAdapters()
@@ -590,7 +569,6 @@ bool CDXParentHandler::SetupDeviceD3D()
 
 bool CDXParentHandler::CreateMainView(const uint16_t w, const uint16_t h)
 {
-    UNUSED(w); UNUSED(h);
     ID3D11Texture2D* pBackBuffer = nullptr;
     if (FAILED(m_pSwapChain->GetBuffer(0u, IID_PPV_ARGS(&pBackBuffer))))
     {
@@ -604,7 +582,7 @@ bool CDXParentHandler::CreateMainView(const uint16_t w, const uint16_t h)
         return false;
     }
 
-    this->CreateDepthBuffer(pBackBuffer, &m_pDepthBuffer, &m_pDepthStencilView);
+    this->CreateDepthBuffer(pBackBuffer);
     {
         D3D11_RASTERIZER_DESC desc = {};
         desc.FillMode = D3D11_FILL_SOLID;
@@ -613,14 +591,6 @@ bool CDXParentHandler::CreateMainView(const uint16_t w, const uint16_t h)
         if (FAILED(m_pDevice->CreateRasterizerState(&desc, &m_pRasterizerState)))
         {
             assertm(false, "Failed to create rasterizer state.");
-            return false;
-        }
-
-        desc.FillMode = D3D11_FILL_WIREFRAME;
-
-        if (FAILED(m_pDevice->CreateRasterizerState(&desc, &m_pRasterizerStateWF)))
-        {
-            assertm(false, "Failed to create wireframe rasterizer state.");
             return false;
         }
     }
@@ -633,16 +603,6 @@ bool CDXParentHandler::CreateMainView(const uint16_t w, const uint16_t h)
 
         if (FAILED(m_pDevice->CreateDepthStencilState(&desc, &m_pDepthStencilState)))
             assertm(false, "Failed to create depth stencil state.");
-    }
-
-    {
-        D3D11_DEPTH_STENCIL_DESC desc = {};
-        desc.DepthEnable = false;
-        desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
-        desc.DepthFunc = D3D11_COMPARISON_LESS;
-
-        if (FAILED(m_pDevice->CreateDepthStencilState(&desc, &m_pDepthStencilStateNoDepthTest)))
-            assertm(false, "Failed to create non-depth stencil state.");
     }
 
     {
@@ -686,73 +646,15 @@ bool CDXParentHandler::CreateMainView(const uint16_t w, const uint16_t h)
             assertm(false, "Failed to create sampler comparison state (shadowmapSampler)");
     }
 
+    m_projectionMatrix = XMMatrixPerspectiveFovLH(0.25f * XM_PI, static_cast<float>(w) / h, 0.1f, g_PreviewSettings.previewCullDistance);
 
     pBackBuffer->Release();
     return true;
 }
 
-// Create a render frame buffer for our 3d previews to render into, so we can display it as an ImGui image
-bool CDXParentHandler::CreateViewForSceneWindow(const uint16_t w, const uint16_t h)
+bool CDXParentHandler::CreateDepthBuffer(ID3D11Texture2D* const frameBuffer)
 {
-    D3D11_TEXTURE2D_DESC textureDesc{};
-    textureDesc.Width = w;
-    textureDesc.Height = h;
-    textureDesc.MipLevels = 1;
-    textureDesc.ArraySize = 1;
-    textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    textureDesc.SampleDesc.Count = 1;
-    textureDesc.Usage = D3D11_USAGE_DEFAULT;
-    textureDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-    textureDesc.CPUAccessFlags = 0;
-    textureDesc.MiscFlags = 0;
-
-    if (FAILED(m_pDevice->CreateTexture2D(&textureDesc, nullptr, &m_previewState.frameBuffer)))
-    {
-        assertm(false, "Failed to create render texture");
-        return false;
-    }
-
-    this->renderWidth = w;
-    this->renderHeight = h;
-
-    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-    srvDesc.Format = textureDesc.Format;
-    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MipLevels = textureDesc.MipLevels;
-    srvDesc.Texture2D.MostDetailedMip = 0;
-
-    if (FAILED(m_pDevice->CreateShaderResourceView(m_previewState.frameBuffer, &srvDesc, &m_previewState.frameBufferSRV)))
-    {
-        assertm(false, "Failed to create render texture SRV");
-        return false;
-    }
-
-    D3D11_RENDER_TARGET_VIEW_DESC viewDesc{};
-    viewDesc.Format = textureDesc.Format;
-    viewDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-    viewDesc.Texture2D.MipSlice = 0;
-
-    if (FAILED(m_pDevice->CreateRenderTargetView(m_previewState.frameBuffer, &viewDesc, &m_previewState.previewRTV)))
-    {
-        assertm(false, "Failed to create render target view.");
-        return false;
-    }
-
-    this->CreateDepthBuffer(m_previewState.frameBuffer, &m_previewState.previewDepthBuffer, &m_previewState.previewDSV);
-    
-    UpdateProjectionMatrix();
-
-    return true;
-}
-
-void CDXParentHandler::UpdateProjectionMatrix()
-{
-    m_projectionMatrix = XMMatrixPerspectiveFovLH(0.25f * XM_PI, static_cast<float>(renderWidth) / renderHeight, 0.1f, g_PreviewSettings.previewCullDistance);
-}
-
-bool CDXParentHandler::CreateDepthBuffer(ID3D11Texture2D* const frameBuffer, ID3D11Texture2D** depthBuffer, ID3D11DepthStencilView** depthStencilView)
-{
-    assert(depthBuffer); assert(depthStencilView);
+    ID3D11Texture2D* depthBuffer = nullptr;
     D3D11_TEXTURE2D_DESC depthBufferDesc = {};
 
     // copy desc from the frame buffer
@@ -762,8 +664,8 @@ bool CDXParentHandler::CreateDepthBuffer(ID3D11Texture2D* const frameBuffer, ID3
     depthBufferDesc.Format = DXGI_FORMAT_R32_TYPELESS;
     depthBufferDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
 
-    HRESULT hr = m_pDevice->CreateTexture2D(&depthBufferDesc, NULL, depthBuffer);
-    if (FAILED(hr) || !*depthBuffer)
+    HRESULT hr = m_pDevice->CreateTexture2D(&depthBufferDesc, NULL, &depthBuffer);
+    if (FAILED(hr) || !depthBuffer)
     {
         assertm(false, "Failed to create depth buffer.");
         return false;
@@ -774,7 +676,7 @@ bool CDXParentHandler::CreateDepthBuffer(ID3D11Texture2D* const frameBuffer, ID3
     depthStencilViewDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
     depthStencilViewDesc.Texture2D.MipSlice = 0u; // depth buffer does not have mips so make sure it uses the right data
 
-    hr = m_pDevice->CreateDepthStencilView(*depthBuffer, &depthStencilViewDesc, depthStencilView);
+    hr = m_pDevice->CreateDepthStencilView(depthBuffer, &depthStencilViewDesc, &m_pDepthStencilView);
     if (FAILED(hr))
         assertm(false, "Failed to create depth stencil view.");
 
@@ -806,13 +708,6 @@ bool CDXParentHandler::CreateMisc()
     if (!GenerateTexture2D(UINT32_MAX, sizeof(uint16_t), DXGI_FORMAT_R16_TYPELESS, 2048, 2048, 1, 0, false, &m_staticShadowTexture, &m_staticShadowTextureSRV))
         return false;
 
-    auto& grid = this->GetScene().previewGrid;
-
-    grid.CreateBuffers(m_pDevice);
-
-    grid.vertexShader = m_pShaderManager->LoadShaderFromString("preview/prim_vs", s_PrimitiveVertexShader, eShaderType::Vertex, s_PrimitiveInputLayout, std::size(s_PrimitiveInputLayout));
-    grid.pixelShader = m_pShaderManager->LoadShaderFromString("preview/prim_ps", s_PrimitivePixelShader, eShaderType::Pixel);
-
     // todo: use an actual cubemap
     //DirectX::TexMetadata meta;
     //DirectX::ScratchImage img;
@@ -832,11 +727,8 @@ void CDXParentHandler::CleanupD3D()
     DX_RELEASE_PTR(m_pDeviceContext);
     DX_RELEASE_PTR(m_pSwapChain);
     DX_RELEASE_PTR(m_pDepthStencilView);
-    DX_RELEASE_PTR(m_pDepthBuffer);
     DX_RELEASE_PTR(m_pDepthStencilState);
-    DX_RELEASE_PTR(m_pDepthStencilStateNoDepthTest);
     DX_RELEASE_PTR(m_pRasterizerState);
-    DX_RELEASE_PTR(m_pRasterizerStateWF);
     DX_RELEASE_PTR(m_pSamplerState);
     DX_RELEASE_PTR(m_pSamplerCmpState);
 
@@ -862,9 +754,6 @@ void CDXParentHandler::CleanupD3D()
 
     DX_RELEASE_PTR(m_staticShadowTexture);
     DX_RELEASE_PTR(m_staticShadowTextureSRV);
-
-    // Reuse resizing function for preview cleanup here, since all it does is release states
-    CleanupForPreviewResize();
 }
 
 void CDXParentHandler::HandleResize(const uint16_t x, const uint16_t y)
@@ -1103,45 +992,4 @@ void CDXCamera::CommitCameraDataBufferUpdates()
 
         ctx->Unmap(this->bufCommonPerCamera, 0);
     }
-}
-
-void CDXDrawData::DrawLine(const Vector& start, const Vector& end, uint32_t col, bool noDepthTest, float width, float duration)
-{
-    assertm(width == 1.f, "Line thickness is currently not supported");
-
-    const PrimitiveVertex_t verts[] = {
-        { start, col },
-        { end,   col }
-    };
-
-    DXMeshDrawData_DebugPrim_t prim = {};
-
-    prim.visible = true;
-    prim.wireframe = false;
-    prim.indexed = false;
-    prim.noDepthTest = noDepthTest;
-
-    prim.primTopology = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
-
-    // If duration == 0: line lasts for a single frame
-    // If duration  < 0: line is permanent
-    // If duration  > 0: line lasts for N seconds
-    prim.lifeRemaining = duration < 0 ? INFINITY : duration;
-
-    prim.numVertices = std::size(verts);
-
-    D3D11_BUFFER_DESC desc = {};
-
-    desc.Usage = D3D11_USAGE_DYNAMIC;
-    desc.ByteWidth = sizeof(verts);
-    desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-    desc.MiscFlags = 0;
-
-    D3D11_SUBRESOURCE_DATA srd{ verts };
-
-    if (FAILED(g_dxHandler->GetDevice()->CreateBuffer(&desc, &srd, &prim.vertexBuffer)))
-        return;
-
-    debugPrims.emplace_back(prim);
 }

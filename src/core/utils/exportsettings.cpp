@@ -1,15 +1,7 @@
 #include <pch.h>
 #include <core/utils/exportsettings.h>
-#include <game/rtech/utils/bsp/bspflags.h>
 
-RSXSettings_t g_rsxSettings{ .exportNormalRecalcSetting = eNormalExportRecalc::NML_RECALC_NONE, .exportTextureNameSetting = eTextureExportName::TXTR_NAME_TEXT,
-	.exportMaterialTextures = true, .exportPathsFull = false, .exportAssetDeps = false, .disableCachedNames = false, .previewedSkinIndex = 0,
-	.qcMajorVersion = 49, .qcMinorVersion = 0, .exportRigSequences = true, .exportModelSkin = false, .exportModelMatsTruncated = false,
-	.exportQCIFiles = false, .useOrigScriptExportExtensions = false, .exportPhysicsContentsFilter = static_cast<uint32_t>(TRACE_MASK_ALL), .bridgePort = 3033,
-	.exportDirectory = "",
-};
-
-void RSXSettings_t::SetFromCLI(const CCommandLine* cli)
+void ExportSettings_t::SetFromCLI(const CCommandLine* cli)
 {
 	if (const char* const nmlRecalc = cli->GetParamValue("--nmlrecalc"))
 	{
@@ -35,6 +27,7 @@ void RSXSettings_t::SetFromCLI(const CCommandLine* cli)
 
 	this->exportMaterialTextures = cli->HasParam("-matltextures");
 	this->exportPathsFull = cli->HasParam("-exportfullpaths");
+	this->shaderKeepSM51 = cli->HasParam("-keepsm51");
 	this->exportAssetDeps = cli->HasParam("-exportdependencies");
 	this->disableCachedNames = cli->HasParam("-nocachedb");
 

@@ -8,7 +8,7 @@
 #pragma comment(lib, "thirdparty/xcompress/xcompress.lib")
 #endif
 
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 bool CBluepointPakfile::ParseFromFile()
 {
@@ -110,11 +110,11 @@ bool ExportBluepointWrappedFileAsset(CAsset* const asset, const int setting)
 	const CBluepointWrappedFile* const file = static_cast<const CBluepointWrappedFile* const>(asset);
 	const CBluepointPakfile* const pakfile = file->GetContainerFile<CBluepointPakfile>();
 
-	std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+	std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
 	const std::filesystem::path filePath(file->GetAssetName());
 
 	// truncate paths?
-	if (g_rsxSettings.exportPathsFull)
+	if (g_ExportSettings.exportPathsFull)
 	{
 		exportPath.append(filePath.parent_path().string());
 	}

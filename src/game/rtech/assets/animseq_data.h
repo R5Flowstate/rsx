@@ -21,4 +21,4 @@ public:
 	size_t dataSize;
 };
 
-void ParseAnimSeqDataForSeq(ModelSeq_t* const seqdesc, const size_t boneCount, const uint32_t flagWidth);
+void ParseAnimSeqDataForSeq(ModelSeq_t* const seqdesc, const size_t boneCount);

@@ -12,190 +12,14 @@
 
 extern CDXParentHandler* g_dxHandler;
 extern CBufferManager g_BufferManager;
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 extern CPreviewDrawData g_currentPreviewDrawData;
 
 //
 // PARSEDDATA
 //
-
 #define VERT_DATA(t, d, o) reinterpret_cast<const t* const>(d + o)
-#define MAP_BONE(a, b) static_cast<a>(reinterpret_cast<const a* const>(boneMap)[b]);
-
-void Vertex_t::ParseWeightFromVG_256(Vertex_t* const vert, VertexWeight_t* const weights, const char* const rawVertexData, const void* const boneMap, const vvw::mstudioboneweightextra_t* const weightExtra, const uint8_t parseFlags, int& weightIdx, int& offset)
-{
-	const vg::BlendWeightsPacked_s* const blendWeights = VERT_DATA(vg::BlendWeightsPacked_s, rawVertexData, offset);
-
-	// Copy blend data into the vert struct
-	memcpy_s(&vert->blendData, sizeof(vert->blendData), blendWeights, sizeof(vert->blendData));
-
-	uint8_t curIdx = 0; // current weight
-	uint16_t remaining = 32767; // 'weight' remaining to assign to the last bone
-
-	// model has more than 3 weights per vertex
-	if (parseFlags & VERT_PARSE_EXTRAWEIGHT)
-	{
-		const vg::BlendWeightIndicesPacked_256_s* const blendIndices = VERT_DATA(vg::BlendWeightIndicesPacked_256_s, rawVertexData, offset + 4);
-
-		assertm(blendIndices->boneCount < 16, "model had more than 16 bones on complex weights");
-
-#ifdef _DEBUG
-			if (blendIndices->boneCount > 1 && weightExtra == nullptr)
-			{
-				assertm(false, "had more than two weights but no extra weight data");
-			}
-#endif // _DEBUG
-
-		weights[curIdx].bone = MAP_BONE(uint8_t, blendIndices->firstBone);
-		weights[curIdx].weight = blendWeights->Weight(0);
-		remaining -= blendWeights->weight[0];
-
-		curIdx++;
-
-		// only hit if we have over 2 bones/weights
-		for (uint8_t i = curIdx; i < blendIndices->boneCount; i++)
-		{
-			auto extraWeight = weightExtra[blendWeights->ExtraWeightsStartIndex() + (curIdx - 1)];
-
-			weights[curIdx].bone = MAP_BONE(uint8_t, extraWeight.bone);
-			weights[curIdx].weight = extraWeight.Weight();
-
-			remaining -= extraWeight.weight;
-
-			curIdx++;
-		}
-
-		// only hit if we have over 1 bone/weight
-		if (blendIndices->boneCount > 0)
-		{
-			weights[curIdx].bone = MAP_BONE(uint8_t, blendIndices->lastBone);
-			weights[curIdx].weight = UNPACKWEIGHT(remaining);
-
-			curIdx++;
-		}
-
-		assert(static_cast<uint8_t>(curIdx) == (blendIndices->boneCount + 1)); // numbones is really 'extra' bones on top of the base weight, verify the count is correct
-	}
-	else
-	{
-		const vg::BlendWeightIndices_s* const blendIndices = VERT_DATA(vg::BlendWeightIndices_s, rawVertexData, offset + 4);
-
-		assertm(blendIndices->boneCount < 3, "model had more than 3 bones on simple weights");
-
-		for (uint8_t i = 0; i < blendIndices->boneCount; i++)
-		{
-			weights[curIdx].bone = MAP_BONE(uint8_t, blendIndices->bone[curIdx]);
-			weights[curIdx].weight = blendWeights->Weight(curIdx);
-
-			remaining -= blendWeights->weight[curIdx];
-
-			curIdx++;
-		}
-
-		weights[curIdx].bone = MAP_BONE(uint8_t, blendIndices->bone[curIdx]);
-		weights[curIdx].weight = UNPACKWEIGHT(remaining);
-
-		curIdx++;
-
-		assert(static_cast<uint8_t>(curIdx) == (blendIndices->boneCount + 1)); // numbones is really 'extra' bones on top of the base weight, verify the count is correct
-	}
-
-	vert->weightCount = curIdx;
-
-	weightIdx += curIdx;
-
-	// adjust data offset
-	offset += 8;
-}
-
-void Vertex_t::ParseWeightFromVG_1024(Vertex_t* const vert, VertexWeight_t* const weights, const char* const rawVertexData, const void* const boneMap, const vvw::mstudioboneweightextra_t* const weightExtra, const uint8_t parseFlags, int& weightIdx, int& offset)
-{
-	const vg::BlendWeightsPacked_s* const blendWeights = VERT_DATA(vg::BlendWeightsPacked_s, rawVertexData, offset);
-
-	// Copy blend data into the vert struct
-	memcpy_s(&vert->blendData, sizeof(vert->blendData), blendWeights, sizeof(vert->blendData));
-
-	uint8_t curIdx = 0; // current weight
-	uint16_t remaining = 32767; // 'weight' remaining to assign to the last bone
-
-	// model has more than 3 weights per vertex
-	if (parseFlags & VERT_PARSE_EXTRAWEIGHT)
-	{
-		const vg::BlendWeightIndicesPacked_1024_s* const blendIndices = VERT_DATA(vg::BlendWeightIndicesPacked_1024_s, rawVertexData, offset + 4);
-
-		assertm(blendIndices->boneCount < 16, "model had more than 16 bones on complex weights");
-
-#ifdef _DEBUG
-		if (blendIndices->boneCount > 1 && weightExtra == nullptr)
-		{
-			assertm(false, "had more than two weights but no extra weight data");
-		}
-#endif // _DEBUG
-
-		weights[curIdx].bone = MAP_BONE(uint16_t, blendIndices->firstBone);
-		weights[curIdx].weight = blendWeights->Weight(0);
-		remaining -= blendWeights->weight[0];
-
-		curIdx++;
-
-		// only hit if we have over 2 bones/weights
-		for (uint8_t i = curIdx; i < blendIndices->boneCount; i++)
-		{
-			auto extraWeight = weightExtra[blendWeights->ExtraWeightsStartIndex() + (curIdx - 1)];
-
-			weights[curIdx].bone = MAP_BONE(uint16_t, extraWeight.bone);
-			weights[curIdx].weight = extraWeight.Weight();
-
-			remaining -= extraWeight.weight;
-
-			curIdx++;
-		}
-
-		// only hit if we have over 1 bone/weight
-		if (blendIndices->boneCount > 0)
-		{
-			weights[curIdx].bone = MAP_BONE(uint16_t, blendIndices->lastBone);
-			weights[curIdx].weight = UNPACKWEIGHT(remaining);
-
-			curIdx++;
-		}
-
-		assert(static_cast<uint8_t>(curIdx) == (blendIndices->boneCount + 1)); // numbones is really 'extra' bones on top of the base weight, verify the count is correct
-	}
-	else
-	{
-		const vg::BlendWeightIndices_s* const blendIndices = VERT_DATA(vg::BlendWeightIndices_s, rawVertexData, offset + 4);
-
-		assertm(blendIndices->boneCount < 3, "model had more than 3 bones on simple weights");
-
-		for (uint8_t i = 0; i < blendIndices->boneCount; i++)
-		{
-			weights[curIdx].bone = MAP_BONE(uint16_t, blendIndices->bone[curIdx]);
-			weights[curIdx].weight = blendWeights->Weight(curIdx);
-
-			remaining -= blendWeights->weight[curIdx];
-
-			curIdx++;
-		}
-
-		weights[curIdx].bone = MAP_BONE(uint16_t, blendIndices->bone[curIdx]);
-		weights[curIdx].weight = UNPACKWEIGHT(remaining);
-
-		curIdx++;
-
-		assert(static_cast<uint8_t>(curIdx) == (blendIndices->boneCount + 1)); // numbones is really 'extra' bones on top of the base weight, verify the count is correct
-	}
-
-	vert->weightCount = curIdx;
-
-	weightIdx += curIdx;
-
-	// adjust data offset
-	offset += 8;
-}
-
-bool Vertex_t::ParseVertexFromVG(Vertex_t* const vert, VertexWeight_t* const weights, Vector2D* const texcoords, ModelMeshData_t* const mesh, const char* const rawVertexData, const void* const boneMap, const vvw::mstudioboneweightextra_t* const weightExtra,
-	const uint8_t parseFlags, int& weightIdx)
+void Vertex_t::ParseVertexFromVG(Vertex_t* const vert, VertexWeight_t* const weights, Vector2D* const texcoords, ModelMeshData_t* const mesh, const char* const rawVertexData, const uint8_t* const boneMap, const vvw::mstudioboneweightextra_t* const weightExtra, int& weightIdx)
 {
 	int offset = 0;
 
@@ -251,14 +75,70 @@ bool Vertex_t::ParseVertexFromVG(Vertex_t* const vert, VertexWeight_t* const wei
 	assertm(!(mesh->rawVertexLayoutFlags & VERT_BLENDWEIGHTS_UNPACKED), "mesh had unpacked weights!");
 	if (mesh->rawVertexLayoutFlags & (VERT_BLENDINDICES | VERT_BLENDWEIGHTS_PACKED))
 	{
-		if (parseFlags & VERT_PARSE_BONES_1024)
+		const vg::BlendWeightsPacked_s* const blendWeights = VERT_DATA(vg::BlendWeightsPacked_s, rawVertexData, offset);
+		const vg::BlendWeightIndices_s* const blendIndices = VERT_DATA(vg::BlendWeightIndices_s, rawVertexData, offset + 4);
+
+		offset += 8;
+
+		uint8_t curIdx = 0; // current weight
+		uint16_t remaining = 32767; // 'weight' remaining to assign to the last bone
+
+		// model has more than 3 weights per vertex
+		if (nullptr != weightExtra)
 		{
-			ParseWeightFromVG_1024(vert, weights, rawVertexData, boneMap, weightExtra, parseFlags, weightIdx, offset);
+			assertm(blendIndices->boneCount < 16, "model had more than 16 bones on complex weights");
+
+			// first weight, we will always have this
+			weights[curIdx].bone = boneMap[blendIndices->bone[0]];
+			weights[curIdx].weight = blendWeights->Weight(0);
+			remaining -= blendWeights->weight[0];
+
+			curIdx++;
+
+			// only hit if we have over 2 bones/weights
+			for (uint8_t i = curIdx; i < blendIndices->boneCount; i++)
+			{
+				weights[curIdx].bone = boneMap[weightExtra[blendWeights->Index() + (curIdx - 1)].bone];
+				weights[curIdx].weight = weightExtra[blendWeights->Index() + (curIdx - 1)].Weight();
+
+				remaining -= weightExtra[blendWeights->Index() + (curIdx - 1)].weight;
+
+				curIdx++;
+			}
+
+			// only hit if we have over 1 bone/weight
+			if (blendIndices->boneCount > 0)
+			{
+				weights[curIdx].bone = boneMap[blendIndices->bone[1]];
+				weights[curIdx].weight = UNPACKWEIGHT(remaining);
+
+				curIdx++;
+			}
 		}
 		else
 		{
-			ParseWeightFromVG_256(vert, weights, rawVertexData, boneMap, weightExtra, parseFlags, weightIdx, offset);
+			assertm(blendIndices->boneCount < 3, "model had more than 3 bones on simple weights");
+
+			for (uint8_t i = 0; i < blendIndices->boneCount; i++)
+			{
+				weights[curIdx].bone = boneMap[blendIndices->bone[curIdx]];
+				weights[curIdx].weight = blendWeights->Weight(curIdx);
+
+				remaining -= blendWeights->weight[curIdx];
+
+				curIdx++;
+			}
+
+			weights[curIdx].bone = boneMap[blendIndices->bone[curIdx]];
+			weights[curIdx].weight = UNPACKWEIGHT(remaining);
+
+			curIdx++;
 		}
+
+		vert->weightCount = curIdx;
+		assert(static_cast<uint8_t>(vert->weightCount) == (blendIndices->boneCount + 1)); // numbones is really 'extra' bones on top of the base weight, verify the count is correct
+
+		weightIdx += curIdx;
 	}
 	// our mesh does not have weight data, use a set of default weights. 
 	// [rika]: this can only happen when a model has one bone
@@ -307,8 +187,6 @@ bool Vertex_t::ParseVertexFromVG(Vertex_t* const vert, VertexWeight_t* const wei
 	}
 
 	assertm(offset == mesh->vertCacheSize, "parsed data size differed from vertexCacheSize");
-
-	return true;
 }
 #undef VERT_DATA
 
@@ -561,108 +439,7 @@ void ParseModelHitboxData_v16(ModelParsedData_t* const parsedData)
 	}
 }
 
-void CreateBuffersForModelHitboxes(ModelParsedData_t* const parsedData, CDXDrawData* const drawData)
-{
-	CShader* vertexShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/model_vs", s_PreviewVertexShader, eShaderType::Vertex);;
-	CShader* pixelShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/model_ps", s_PreviewPixelShader, eShaderType::Pixel);
-
-	for (auto& hitboxSet : parsedData->hitboxsets)
-	{
-		for (int i = 0; i < hitboxSet.numHitboxes; ++i)
-		{
-			const ModelHitbox_t& h = hitboxSet.hitboxes[i];
-
-			Vector bonePos = parsedData->bones[h.bone].pos;
-			Vector bbmin = (*h.bbmin) + bonePos;
-			Vector bbmax = (*h.bbmax) + bonePos;
-
-			// -8: x y z
-			// -7: X y z
-			// -6: x Y z
-			// -5: x y Z
-			// -4: X Y z
-			// -3: X y Z
-			// -2: x Y Z
-			// -1: X Y Z
-
-			const std::vector<Vertex_t> vertices = {
-				{bbmin.x, bbmin.y, bbmin.z},
-				{bbmax.x, bbmin.y, bbmin.z},
-				{bbmin.x, bbmax.y, bbmin.z},
-				{bbmin.x, bbmin.y, bbmax.z},
-				{bbmax.x, bbmax.y, bbmin.z},
-				{bbmax.x, bbmin.y, bbmax.z},
-				{bbmin.x, bbmax.y, bbmax.z},
-				{bbmax.x, bbmax.y, bbmax.z},
-			};
-
-			const std::vector<uint16_t> indices = {
-				2, 4, 0,
-				0, 4, 1,
-				5, 3, 1,
-				1, 3, 0,
-				4, 7, 1,
-				1, 7, 5,
-				6, 7, 2,
-				2, 7, 4,
-				7, 6, 5,
-				5, 6, 3,
-				6, 2, 3,
-				3, 2, 0
-			};
-
-			DXMeshDrawData_t& meshDrawData = drawData->meshBuffers.emplace_back();
-
-			meshDrawData.visible = false;
-			meshDrawData.doFrustumCulling = false;
-			meshDrawData.wireframe = true;
-			meshDrawData.indexFormat = DXGI_FORMAT_R16_UINT;
-			meshDrawData.vertexShader = vertexShader->Get<ID3D11VertexShader>();
-			meshDrawData.pixelShader = pixelShader->Get<ID3D11PixelShader>();
-			meshDrawData.inputLayout = vertexShader->GetInputLayout();
-			meshDrawData.hasGameShaders = false;
-
-			if (!meshDrawData.vertexBuffer)
-			{
-				constexpr UINT vertStride = sizeof(Vertex_t);
-
-				D3D11_BUFFER_DESC desc = {};
-
-				desc.Usage = D3D11_USAGE_DYNAMIC;
-				desc.ByteWidth = static_cast<UINT>(vertStride * vertices.size());
-				desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-				desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-				desc.MiscFlags = 0;
-
-				D3D11_SUBRESOURCE_DATA srd{ vertices.data() };
-
-				if (FAILED(g_dxHandler->GetDevice()->CreateBuffer(&desc, &srd, &meshDrawData.vertexBuffer)))
-					return;
-
-				meshDrawData.vertexStride = vertStride;
-			}
-
-			if (!meshDrawData.indexBuffer)
-			{
-				D3D11_BUFFER_DESC desc = {};
-
-				desc.Usage = D3D11_USAGE_DYNAMIC;
-				desc.ByteWidth = static_cast<UINT>(indices.size() * sizeof(uint16_t));
-				desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-				desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-				desc.MiscFlags = 0;
-
-				D3D11_SUBRESOURCE_DATA srd = { indices.data()};
-				if (FAILED(g_dxHandler->GetDevice()->CreateBuffer(&desc, &srd, &meshDrawData.indexBuffer)))
-					return;
-
-				meshDrawData.numIndices = indices.size();
-			}
-		}
-	}
-}
-
-void CreateBuffersForModelDrawData(ModelParsedData_t* const parsedData, CDXDrawData* const drawData, const uint64_t lod)
+void ParseModelDrawData(ModelParsedData_t* const parsedData, CDXDrawData* const drawData, const uint64_t lod)
 {
 	// [rika]: eventually parse through models
 	for (size_t i = 0; i < parsedData->lods.at(lod).meshes.size(); ++i)
@@ -672,7 +449,6 @@ void CreateBuffersForModelDrawData(ModelParsedData_t* const parsedData, CDXDrawD
 
 		meshDrawData->visible = true;
 		meshDrawData->doFrustumCulling = false;
-		meshDrawData->wireframe = false;
 
 		if (mesh.materialAsset)
 		{
@@ -688,7 +464,11 @@ void CreateBuffersForModelDrawData(ModelParsedData_t* const parsedData, CDXDrawD
 
 		if (!meshDrawData->vertexBuffer)
 		{
+#if 0//defined(ADVANCED_MODEL_PREVIEW)
+			const UINT vertStride = mesh.vertCacheSize;
+#else
 			constexpr UINT vertStride = sizeof(Vertex_t);
+#endif
 
 			D3D11_BUFFER_DESC desc = {};
 
@@ -698,7 +478,11 @@ void CreateBuffersForModelDrawData(ModelParsedData_t* const parsedData, CDXDrawD
 			desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 			desc.MiscFlags = 0;
 
+#if 0//defined(ADVANCED_MODEL_PREVIEW)
+			const void* vertexData = mesh.rawVertexData;
+#else
 			const void* vertexData = parsedVertexData->GetVertices();
+#endif
 
 			D3D11_SUBRESOURCE_DATA srd{ vertexData };
 
@@ -706,6 +490,10 @@ void CreateBuffersForModelDrawData(ModelParsedData_t* const parsedData, CDXDrawD
 				return;
 
 			meshDrawData->vertexStride = vertStride;
+
+#if 0//defined(ADVANCED_MODEL_PREVIEW)
+			delete[] mesh.rawVertexData;
+#endif
 		}
 
 		if (!meshDrawData->indexBuffer)
@@ -723,36 +511,6 @@ void CreateBuffersForModelDrawData(ModelParsedData_t* const parsedData, CDXDrawD
 				return;
 
 			meshDrawData->numIndices = mesh.indexCount;
-		}
-
-		if (!meshDrawData->weightsBuffer)
-		{
-			VertexWeight_t* const weights = parsedVertexData->GetWeights();
-			const int64_t numWeights = parsedVertexData->GetWeightCount();
-
-			VertexWeight_ForShader_t* wfs = new VertexWeight_ForShader_t[numWeights];
-			for (int64_t j = 0; j < numWeights; ++j)
-				wfs[j] = weights[j];
-
-			if(CreateD3DBuffer(g_dxHandler->GetDevice(),
-				&meshDrawData->weightsBuffer, static_cast<UINT>(numWeights) * sizeof(VertexWeight_ForShader_t),
-				D3D11_USAGE_DYNAMIC, D3D11_BIND_SHADER_RESOURCE,
-				D3D11_CPU_ACCESS_WRITE, D3D11_RESOURCE_MISC_BUFFER_STRUCTURED, sizeof(VertexWeight_ForShader_t), wfs
-			))
-			{
-				D3D11_SHADER_RESOURCE_VIEW_DESC desc{};
-				desc.Format = DXGI_FORMAT_UNKNOWN;
-				desc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
-				desc.Buffer.FirstElement = 0;
-				desc.Buffer.NumElements = static_cast<UINT>(numWeights);
-
-				HRESULT hr = g_dxHandler->GetDevice()->CreateShaderResourceView(meshDrawData->weightsBuffer, &desc, &meshDrawData->weightsSRV);
-
-				UNUSED(hr);
-				assert(SUCCEEDED(hr));
-			}
-
-			delete[] wfs;
 		}
 	}
 
@@ -793,18 +551,16 @@ void CMeshData::AddVertices(const Vertex_t* const vertices, const size_t vertexC
 	writer += IALIGN16(bufferSize);
 }
 
-void CMeshData::AddWeights(const VertexWeight_t* const weights, const size_t _weightCount)
+void CMeshData::AddWeights(const VertexWeight_t* const weights, const size_t weightCount)
 {
 	assertm(writer, "attempting to write data, but writer is not initialized.");
 
 	weightOffset = writer - reinterpret_cast<char*>(this);
 
-	const size_t bufferSize = _weightCount * sizeof(VertexWeight_t);
+	const size_t bufferSize = weightCount * sizeof(VertexWeight_t);
 	assertm((writer + bufferSize) - reinterpret_cast<char*>(this) < managedBufferSize, "data exceeded buffer size!!!");
 	if (weights)
 		memcpy(writer, weights, bufferSize);
-
-	this->weightCount = _weightCount;
 
 	writer += IALIGN16(bufferSize);
 }
@@ -943,13 +699,13 @@ void HandleModelMaterials(const ModelParsedData_t* const parsedData, std::unorde
 	materials.reserve(parsedData->materials.size());
 
 	// [rika]: pick a skin !
-	if (g_rsxSettings.exportModelSkin && g_rsxSettings.previewedSkinIndex >= static_cast<int>(parsedData->skins.size()))
+	if (g_ExportSettings.exportModelSkin && g_ExportSettings.previewedSkinIndex >= static_cast<int>(parsedData->skins.size()))
 	{
 		assertm(false, "skin index out of range");
-		g_rsxSettings.previewedSkinIndex = 0;
+		g_ExportSettings.previewedSkinIndex = 0;
 	}
 
-	const int skin = g_rsxSettings.exportModelSkin ? g_rsxSettings.previewedSkinIndex : 0;
+	const int skin = g_ExportSettings.exportModelSkin ? g_ExportSettings.previewedSkinIndex : 0;
 
 	const ModelSkinData_t* const skinData = &parsedData->skins.at(skin);
 
@@ -983,7 +739,7 @@ void HandleModelMaterials(const ModelParsedData_t* const parsedData, std::unorde
 	}
 
 	// [rika]: don't export material textures if it's not enabled
-	if (!g_rsxSettings.exportMaterialTextures)
+	if (!g_ExportSettings.exportMaterialTextures)
 		return;
 
 	// [rika]: export material textures
@@ -1131,8 +887,7 @@ bool ExportModelRMAX(const ModelParsedData_t* const parsedData, std::filesystem:
 					const Vertex_t* const vertData = &parsedVertexData->GetVertices()[i];
 
 					Vector normal;
-					Vector tangent;
-					vertData->normalPacked.UnpackNormal(normal, tangent);
+					vertData->normalPacked.UnpackNormal(normal);
 
 					mesh->AddVertex(vertData->position, normal);
 
@@ -1244,14 +999,14 @@ bool ExportModelCast(const ModelParsedData_t* const parsedData, std::filesystem:
 
 			if (!material.asset)
 			{
-				matlNode.SetProperty(0, cast::CastPropertyId::String, static_cast<int>(cast::CastPropsMaterial::Name), GetStringAfterLastSlash(materialData->name), 1u); // unsure why it does this but we're rolling with it!
+				matlNode.SetProperty(0, cast::CastPropertyId::String, static_cast<int>(cast::CastPropsMaterial::Name), keepAfterLastSlashOrBackslash(materialData->name), 1u); // unsure why it does this but we're rolling with it!
 				modelNode->AddChild(matlNode);
 				continue;
 			}
 
 			const MaterialAsset* const materialAsset = material.asset;
 
-			matlNode.SetProperty(0, cast::CastPropertyId::String, static_cast<int>(cast::CastPropsMaterial::Name), GetStringAfterLastSlash(materialAsset->name), 1u);
+			matlNode.SetProperty(0, cast::CastPropertyId::String, static_cast<int>(cast::CastPropsMaterial::Name), keepAfterLastSlashOrBackslash(materialAsset->name), 1u);
 
 			// [rika]: parse out our textures if we have bindings for them, don't if not
 			// [rika]: exit early if no textures
@@ -1352,7 +1107,7 @@ bool ExportModelCast(const ModelParsedData_t* const parsedData, std::filesystem:
 				std::unique_ptr<char[]> parsedVertexDataBuf = parsedData->meshVertexData.getIdx(meshData.meshVertexDataIndex);
 				const CMeshData* const parsedVertexData = reinterpret_cast<CMeshData*>(parsedVertexDataBuf.get());
 
-				std::string matl = nullptr != meshData.materialAsset ? GetStringAfterLastSlash(meshData.GetMaterialAsset()->name) : std::to_string(materialGuid);
+				std::string matl = nullptr != meshData.materialAsset ? keepAfterLastSlashOrBackslash(meshData.GetMaterialAsset()->name) : std::to_string(materialGuid);
 				std::string meshName = std::format("{}_{}", modelData.name, matl);
 				cast::CastNode meshNode(cast::CastId::Mesh, 1, RTech::StringToGuid(meshName.c_str())); // name
 
@@ -1383,10 +1138,8 @@ bool ExportModelCast(const ModelParsedData_t* const parsedData, std::filesystem:
 				{
 					const Vertex_t& vert = parsedVertexData->GetVertices()[vertIdx];
 
-					Vector tangent;
-
 					vertexData.positions[curIndex + vertIdx] = vert.position;
-					vert.normalPacked.UnpackNormal(vertexData.normals[curIndex + vertIdx], tangent);
+					vert.normalPacked.UnpackNormal(vertexData.normals[curIndex + vertIdx]);
 					vertexData.colors[curIndex + vertIdx] = vert.color;
 
 					for (uint16_t texcoordIdx = 0; texcoordIdx < meshData.texcoordCount; texcoordIdx++)
@@ -1441,9 +1194,8 @@ bool ExportModelCast(const ModelParsedData_t* const parsedData, std::filesystem:
 // parse a Vertex_t into a smd vertex
 inline void ParseVertexIntoSMD(const Vertex_t* const srcVert, const VertexWeight_t* const srcWeights, smd::Vertex* const vert, const bool isStaticProp, const uint32_t texcoordWidth = 1u, const Vector2D* const extraTexcoords = nullptr, const uint32_t vertexIndex = 0u)
 {
-	Vector tangent;
 	vert->position = srcVert->position;
-	srcVert->normalPacked.UnpackNormal(vert->normal, tangent);
+	srcVert->normalPacked.UnpackNormal(vert->normal);
 
 	if (isStaticProp)
 	{
@@ -1539,7 +1291,7 @@ bool ExportModelSMD(const ModelParsedData_t* const parsedData, std::filesystem::
 				const char* material = materialData->GetName(true);
 				assertm(material, "material name should always be valid");
 
-				material = g_rsxSettings.exportModelMatsTruncated ? material : GetStringAfterLastSlash(material);
+				material = g_ExportSettings.exportModelMatsTruncated ? material : keepAfterLastSlashOrBackslash(material);
 
 				for (uint32_t vertexIdx = 0; vertexIdx < meshData.vertCount; vertexIdx++)
 				{
@@ -1889,24 +1641,10 @@ bool ExportSeqDesc(const int setting, const ModelSeq_t* const seqdesc, std::file
 	}
 }
 
-#if defined(HAS_BONED_MODELS)
-
-void CalcMatrixForBone_Unparented(const DXBone_t& bone, XMMATRIX& matOut)
-{
-	XMVECTOR quat = { bone.quat.x, bone.quat.y, bone.quat.z, bone.quat.w };
-
-	XMMATRIX rotationMatrix = XMMatrixRotationQuaternion(quat);
-
-	XMMATRIX translationMatrix = XMMatrixTranslation(bone.pos.x, bone.pos.y, bone.pos.z);
-
-	// srt ong fr
-	matOut = XMMatrixMultiply(XMMatrixMultiply(XMMatrixScaling(bone.scale.x, bone.scale.y, bone.scale.z), rotationMatrix), translationMatrix);
-}
-
 //
 // PREVIEWDATA
 //
-void UpdateModelBoneMatrix(CDXDrawData* const drawData)
+void UpdateModelBoneMatrix(CDXDrawData* const drawData, const ModelParsedData_t* const parsedData)
 {
 	ID3D11DeviceContext* const ctx = g_dxHandler->GetDeviceContext();
 
@@ -1922,40 +1660,13 @@ void UpdateModelBoneMatrix(CDXDrawData* const drawData)
 	if (FAILED(hr))
 		return;
 
-	XMMATRIX* boneArray = reinterpret_cast<XMMATRIX*>(resource.pData);
-
-	std::vector<XMMATRIX> tempBoneMatrices(drawData->bones.size());
+	matrix3x4_t* boneArray = reinterpret_cast<matrix3x4_t*>(resource.pData);
 
 	int i = 0;
-	for (const DXBone_t& bone : drawData->bones)
+	for (const ModelBone_t& bone : parsedData->bones)
 	{
-		CalcMatrixForBone_Unparented(bone, tempBoneMatrices[i]);
-		
-		// now handle parenting
-		if (bone.parent != -1)
-			tempBoneMatrices[i] = XMMatrixMultiply(tempBoneMatrices[i], tempBoneMatrices[bone.parent]);
-
-		const XMMATRIX inverseBindMat = drawData->boneInverseBindMatrices.at(i);
-		const XMMATRIX multiplied = XMMatrixMultiply(inverseBindMat, tempBoneMatrices[i]);
-
-		boneArray[i] = XMMatrixTranspose(multiplied);
-
-		//if (bone.parent != -1)
-		//{
-		//	XMVECTOR scale;
-		//	XMVECTOR pos;
-		//	XMVECTOR rot;
-		//	XMMatrixDecompose(&scale, &rot, &pos, tempBoneMatrices[i]);
-
-		//	XMVECTOR parentPos;
-		//	XMMatrixDecompose(&scale, &rot, &parentPos, tempBoneMatrices[bone.parent]);
-
-		//	constexpr uint32_t boneColour = 0xFF0000FF;
-
-		//	Vector pos1 = pos;
-		//	Vector pos2 = parentPos;
-		//	drawData->DrawLine(Vector(pos1.x, pos1.z, pos1.y), Vector(pos2.x, pos2.z, pos2.y), boneColour, true, 1.f, 0.f);
-		//}
+		const XMMATRIX bonePosMatrix = XMLoadFloat3x4(reinterpret_cast<const XMFLOAT3X4*>(&bone.poseToBone));
+		XMStoreFloat3x4(reinterpret_cast<XMFLOAT3X4*>(boneArray + i), bonePosMatrix);
 
 		i++;
 	}
@@ -1963,40 +1674,14 @@ void UpdateModelBoneMatrix(CDXDrawData* const drawData)
 	ctx->Unmap(drawData->boneMatrixBuffer, 0);
 }
 
-// Calculates a matrix that translates from model-space to joint-space.
-// This is only calculated once when the model is first selected for preview, as it's completely useless for export
-void CalculateBonesInverseBindMatrix(CDXDrawData* const drawData)
-{
-	drawData->boneInverseBindMatrices.resize(drawData->bones.size());
-
-	std::vector<XMMATRIX> tempBoneMatrices(drawData->bones.size());
-
-	int i = 0;
-	for (const DXBone_t& bone : drawData->bones)
-	{
-		CalcMatrixForBone_Unparented(bone, tempBoneMatrices[i]);
-
-		// now handle parenting
-		if (bone.parent != -1)
-			tempBoneMatrices[i] = XMMatrixMultiply(tempBoneMatrices[i], tempBoneMatrices[bone.parent]);
-
-		XMVECTOR determinant;
-		drawData->boneInverseBindMatrices[i] = XMMatrixInverse(&determinant, tempBoneMatrices[i]);
-
-		assert(determinant.m128_f32[0] != 0 && determinant.m128_f32[1] != 0 && determinant.m128_f32[2] != 0);
-
-		i++;
-	}
-}
-
-void InitModelBoneMatrix(CDXDrawData* const drawData, ModelParsedData_t* const parsedData)
+void InitModelBoneMatrix(CDXDrawData* const drawData, const ModelParsedData_t* const parsedData)
 {
 	ID3D11Device* const device = g_dxHandler->GetDevice();
 
 	D3D11_BUFFER_DESC desc{};
 
-	desc.ByteWidth = static_cast<UINT>(parsedData->bones.size()) * sizeof(XMMATRIX);
-	desc.StructureByteStride = sizeof(XMMATRIX);
+	desc.ByteWidth = static_cast<UINT>(parsedData->bones.size()) * sizeof(matrix3x4_t);
+	desc.StructureByteStride = sizeof(matrix3x4_t);
 
 	// make sure this buffer can be updated every frame
 	desc.Usage = D3D11_USAGE_DYNAMIC;
@@ -2031,291 +1716,8 @@ void InitModelBoneMatrix(CDXDrawData* const drawData, ModelParsedData_t* const p
 		return;
 #endif
 
-	drawData->bones.resize(parsedData->bones.size());
-
-	size_t i = 0;
-	for (auto& bone : parsedData->bones)
-	{
-		drawData->bones.at(i) = DXBone_t(bone.name, bone.pos, bone.quat, bone.scale, bone.parent);
-
-		i++;
-	}
-
-	CalculateBonesInverseBindMatrix(drawData);
-
-	// Initial update for the bone matrices
-	UpdateModelBoneMatrix(drawData);
+	UpdateModelBoneMatrix(drawData, parsedData);
 }
-
-static void ModelPreview_ResetPose(const ModelParsedData_t* const parsedData, CDXDrawData* const drawData)
-{
-	// get our bones back!
-	for (size_t i = 0; i < drawData->bones.size(); i++)
-	{
-		const ModelBone_t& originalBone = parsedData->bones.at(i);
-		DXBone_t& bone = drawData->bones.at(i);
-
-		bone.pos = originalBone.pos;
-		bone.quat = originalBone.quat;
-		bone.scale = originalBone.scale;
-	}
-}
-
-static void ModelPreview_AnimFrame(AnimState_t* const state, const SeqPreviewEntry_t* const entry, const ModelParsedData_t* const parsedData, CDXDrawData* const drawData, const float dt)
-{
-	const ModelAnim_t* const animdesc = entry->seqdesc->Anim(state->selectedAnimIndex);
-
-	// update active data when our selection changes
-	if (state->activeSeqIdx != state->selectedSeqIndex || state->activeAnimIdx != state->selectedAnimIndex || state->boneRemap.size() != drawData->bones.size())
-	{
-		state->frame = 0.0f;
-
-		state->activeSeqIdx = state->selectedSeqIndex;
-		state->activeAnimIdx = state->selectedAnimIndex;
-		state->dcmpNoodle.reset();
-
-		if ((animdesc->flags & eStudioAnimFlags::ANIM_VALID) && animdesc->parsedBufferIndex != invalidNoodleIdx)
-			state->dcmpNoodle = entry->seqdesc->parsedData.getIdx(animdesc->parsedBufferIndex);
-
-		// placeholder value of -1 means that the bone has no mapping to the animation's skeleton
-		state->boneRemap.assign(drawData->bones.size(), -1);
-
-		const std::vector<ModelBone_t>& srcBones = *entry->srcBones;
-
-		// find each of our model's bones in the animation's skeleton
-		// i thought that they would match up but apparently not so that's super fun!
-		// i'm sure this isn't the right way of doing it but it's good enough for now
-		for (size_t i = 0; i < drawData->bones.size(); ++i)
-		{
-			for (size_t j = 0; j < srcBones.size(); ++j)
-			{
-				if (!_stricmp(drawData->bones.at(i).name, srcBones.at(j).name))
-				{
-					state->boneRemap.at(i) = static_cast<int>(j);
-					break;
-				}
-			}
-		}
-	}
-
-	// start from the non-animated position of the model
-	ModelPreview_ResetPose(parsedData, drawData);
-
-	// this check must be after resetting the pose so that we end up in a neutral position if there is no real anim data 
-	if (!state->dcmpNoodle)
-		return;
-
-	const int finalFrameIdx = animdesc->numframes - 1;
-
-	// if the player is paused or there's only one anim frame then dont advance any further
-	if (state->playing && finalFrameIdx > 0)
-	{
-		state->frame += dt * animdesc->fps;
-
-		// if we've hit the end of the anim!
-		if (state->frame > finalFrameIdx)
-		{
-			state->frame = state->looping ? fmodf(state->frame, static_cast<float>(finalFrameIdx)) : finalFrameIdx;
-			state->playing = state->looping; // if looping we r still playing
-		}
-	}
-	
-	// the cast rounds down to the current anim frame that we're using.
-	// state->frame will contain a fractional part since we will almost definitely be running at >30fps (or animdesc->fps)
-	const int currFrameIdx = std::clamp(static_cast<int>(state->frame), 0, finalFrameIdx);
-	const int nextFrameIdx = std::min(currFrameIdx + 1, finalFrameIdx);
-
-	// get the distance that we are between the two frames so we can (s)lerp the pos and scale
-	const float frameFrac = std::clamp(state->frame - currFrameIdx, 0.0f, 1.0f);
-
-	CAnimData animData(state->dcmpNoodle.get());
-
-	for (size_t i = 0; i < drawData->bones.size(); i++)
-	{
-		// map the gpu's bone on to that of the skeleton that the anim uses
-		const int boneIndex = state->boneRemap.at(i);
-
-		// if boneindex is -1 then this bone is not in the anim's skeleton
-		if (boneIndex < 0)
-			continue;
-
-		DXBone_t& bone = drawData->bones.at(i);
-		const uint8_t flags = animData.GetFlag(boneIndex);
-
-		if (flags & CAnimDataBone::ANIMDATA_POS)
-		{
-			const Vector& pos0 = *animData.GetBonePosForFrame(boneIndex, currFrameIdx);
-			const Vector& pos1 = *animData.GetBonePosForFrame(boneIndex, nextFrameIdx);
-
-			bone.pos = Vector::Lerp(pos0, pos1, frameFrac);
-		}
-
-		if (flags & CAnimDataBone::ANIMDATA_ROT)
-		{
-			Quaternion quat;
-			QuaternionSlerp(*animData.GetBoneQuatForFrame(boneIndex, currFrameIdx), *animData.GetBoneQuatForFrame(boneIndex, nextFrameIdx), frameFrac, quat);
-
-			bone.quat = quat;
-		}
-
-		if (flags & CAnimDataBone::ANIMDATA_SCL)
-		{
-			const Vector& scale0 = *animData.GetBoneScaleForFrame(boneIndex, currFrameIdx);
-			const Vector& scale1 = *animData.GetBoneScaleForFrame(boneIndex, nextFrameIdx);
-
-			bone.scale = Vector::Lerp(scale0, scale1, frameFrac);
-		}
-	}
-}
-
-bool Preview_SequencesSection(ModelPreviewInfo_t* const info, const ModelParsedData_t* const parsedData, CDXDrawData* const drawData)
-{
-	AnimState_t& state = info->animState;
-
-	bool refreshRequested = false;
-
-	const SeqPreviewEntry_t* selectedSequenceEntry = nullptr;
-	if (state.selectedSeqIndex >= 0 && state.selectedSeqIndex < static_cast<int>(info->sequences.size()))
-	{
-		selectedSequenceEntry = &info->sequences.at(state.selectedSeqIndex);
-
-		state.selectedAnimIndex = std::clamp(state.selectedAnimIndex, 0, std::max(selectedSequenceEntry->seqdesc->AnimCount() - 1, 0));
-	}
-	else
-		state.selectedSeqIndex = -1;
-
-	if (ImGui::CollapsingHeader("Sequences (WIP)"))
-	{
-		ImGui::PushFont(NULL, 16.f);
-		ImGui::TextDisabled("Animation preview is an unfinished feature that may have major visual issues");
-		ImGui::PopFont();
-
-		if (info->sequences.empty())
-			ImGui::TextUnformatted("No sequences associated with this model.");
-		else
-		{
-			// just in case the sequence data hasn't been parsed properly for whatever reason
-			// return to the caller and let it know that we want new data!
-			if (ImGui::Button("Refresh##AnimPreview"))
-				refreshRequested = true;
-
-			const char* const comboLabel = selectedSequenceEntry ? selectedSequenceEntry->name.c_str() : "(base pose)";
-
-			if (ImGui::BeginCombo("Sequence##AnimPreview", comboLabel))
-			{
-				// if there's no selected seq then we have selected the base pose (non animated)
-				if (ImGui::Selectable("(base pose)", selectedSequenceEntry == nullptr))
-				{
-					state.selectedSeqIndex = -1;
-					state.Stop();
-
-					selectedSequenceEntry = nullptr;
-				}
-
-				for (int i = 0; i < static_cast<int>(info->sequences.size()); i++)
-				{
-					const SeqPreviewEntry_t& entry = info->sequences.at(i);
-
-					const bool isSelected = state.selectedSeqIndex == i;
-
-					if (ImGui::Selectable(entry.name.c_str(), isSelected, !entry.parsed ? ImGuiSelectableFlags_Disabled : 0))
-					{
-						state.selectedSeqIndex = i;
-						state.selectedAnimIndex = 0;
-
-						state.Restart();
-
-						selectedSequenceEntry = &info->sequences.at(state.selectedSeqIndex);
-					}
-
-					if (isSelected)
-						ImGui::SetItemDefaultFocus();
-				}
-
-				ImGui::EndCombo();
-			}
-
-			if (selectedSequenceEntry)
-			{
-				if (selectedSequenceEntry->seqdesc->AnimCount() > 0)
-				{
-					const ModelSeq_t* const seqdesc = selectedSequenceEntry->seqdesc;
-					const ModelAnim_t* const animdesc = seqdesc->Anim(state.selectedAnimIndex);
-
-					ImGui::Text("Name: %s\nMetadata: %.1f fps, %i frames, %.3f seconds", animdesc->name, animdesc->fps, animdesc->numframes, animdesc->Duration());
-
-					if (animdesc->flags & eStudioAnimFlags::ANIM_DELTA)
-						ImGui::TextUnformatted("Unsupported delta anim; Preview unavailable");
-					else if (!(animdesc->flags & eStudioAnimFlags::ANIM_VALID) || animdesc->parsedBufferIndex == invalidNoodleIdx)
-						ImGui::TextUnformatted("Invalid anim data; Preview unavailable");
-
-					// i don't know what this does ibsr
-					if (seqdesc->AnimCount() > 1)
-						ImGui::SliderInt("AnimIdx##AnimPreview", &state.selectedAnimIndex, 0, seqdesc->AnimCount() - 1);
-
-					if (ImGui::Button(state.playing ? "Pause##AnimPreview" : "Play##AnimPreview"))
-						state.TogglePlay();
-
-					ImGui::SameLine();
-
-					// if the player isnt playing then the user cannot click stop (obvs)
-					ImGui::BeginDisabled(!state.playing && state.frame == 0.f);
-					{
-						if (ImGui::Button("Stop##AnimPreview")) state.Stop();
-					}
-					ImGui::EndDisabled();
-
-					ImGui::SameLine();
-					ImGui::Checkbox("Loop##AnimPreview", &state.looping);
-
-					const int finalFrameIdx = animdesc->numframes > 0 ? animdesc->numframes - 1 : 0;
-
-					ImGui::BeginDisabled(finalFrameIdx == 0);
-					{
-						ImGui::SliderFloat("Frame##AnimPreview", &state.frame, 0.0f, static_cast<float>(finalFrameIdx), "%.1f");
-					}
-					ImGui::EndDisabled();
-
-					// when scrubbing, don't keep playing
-					if (ImGui::IsItemActive())
-						state.playing = false;
-
-				} else ImGui::TextUnformatted("Sequence has no anims!");
-			}
-		}
-	}
-
-	// can run a frame if:
-	// - not refreshing
-	// - we have a sequence entry that:
-	//   - is parsed
-	//   - has animdescs
-	//   - does not have a delta anim selected
-	const bool canRunFrame = !refreshRequested &&
-		(selectedSequenceEntry != nullptr
-			&& selectedSequenceEntry->parsed
-			&& selectedSequenceEntry->seqdesc->AnimCount() > 0
-			&& !(selectedSequenceEntry->seqdesc->Anim(state.selectedAnimIndex)->flags & eStudioAnimFlags::ANIM_DELTA));
-
-	if (!canRunFrame)
-	{
-		// if we aren't able to show a frame of the sequence while we have one selected then show the base pose instead
-		// this happens when you click refresh while a sequence is active or swap to a sequence with no animdescs or a delta anim
-		// (sorry rika i dunno how delta anims work)
-		if (state.selectedSeqIndex != -1)
-		{
-			ModelPreview_ResetPose(parsedData, drawData);
-
-			state.activeSeqIdx = -1;
-			state.activeAnimIdx = -1;
-			state.dcmpNoodle.reset(); // clear the noodle
-		}
-	} else ModelPreview_AnimFrame(&state, selectedSequenceEntry, parsedData, drawData, ImGui::GetIO().DeltaTime);
-
-	// if we clicked refresh then the caller needs to reparse the data so let them know!
-	return refreshRequested;
-}
-#endif
 
 void* PreviewParsedData(ModelPreviewInfo_t* const info, ModelParsedData_t* const parsedData, char* const assetName, const uint64_t assetGUID, const bool firstFrameForAsset)
 {
@@ -2327,14 +1729,10 @@ void* PreviewParsedData(ModelPreviewInfo_t* const info, ModelParsedData_t* const
 		g_currentPreviewDrawData.FreeDrawData();
 
 		CDXDrawData* const drawData = new CDXDrawData();
-
-		// this leaks mem?
 		drawData->meshBuffers.resize(parsedData->lods.at(info->selectedLODLevel).meshes.size());
 		drawData->modelName = assetName;
-		drawData->dataType = CDXDrawData::DrawDataType_e::MODEL;
 
-		CreateBuffersForModelDrawData(parsedData, drawData, info->selectedLODLevel);
-		CreateBuffersForModelHitboxes(parsedData, drawData);
+		ParseModelDrawData(parsedData, drawData, info->selectedLODLevel);
 
 		g_currentPreviewDrawData.UpdateAssetInfo(drawData, assetGUID, info->selectedLODLevel);
 	}
@@ -2343,7 +1741,7 @@ void* PreviewParsedData(ModelPreviewInfo_t* const info, ModelParsedData_t* const
 	if (!drawData)
 		return nullptr;
 
-	drawData->vertexShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/model_vs", s_PreviewVertexShader, eShaderType::Vertex);
+	drawData->vertexShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/model_vs", s_PreviewVertexShader, eShaderType::Vertex);;
 	drawData->pixelShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/model_ps", s_PreviewPixelShader, eShaderType::Pixel);
 
 	// [rika]: do the preview stuff here!
@@ -2355,7 +1753,9 @@ void* PreviewParsedData(ModelPreviewInfo_t* const info, ModelParsedData_t* const
 	ImGui::Text("Local Sequences: %i", parsedData->NumLocalSeq());
 
 	if (info->minLODIndex != info->maxLODIndex)
+	{
 		ImGui::SliderScalar("LOD Level", ImGuiDataType_U8, &info->selectedLODLevel, &info->minLODIndex, &info->maxLODIndex);
+	}
 
 	if (parsedData->skins.size())
 	{
@@ -2388,6 +1788,7 @@ void* PreviewParsedData(ModelPreviewInfo_t* const info, ModelParsedData_t* const
 		}
 	}
 
+	g_ExportSettings.previewedSkinIndex = static_cast<int>(info->selectedSkinIndex);
 
 	if (parsedData->bodyParts.size())
 	{
@@ -2422,14 +1823,6 @@ void* PreviewParsedData(ModelPreviewInfo_t* const info, ModelParsedData_t* const
 		// If the selected bodypart index is out of range, reset it to 0 to prevent an exception
 		if (info->selectedBodypartIndex >= parsedData->bodyParts.size())
 			info->selectedBodypartIndex = 0;
-
-		if (info->selectedSkinIndex >= parsedData->skins.size())
-			info->selectedSkinIndex = 0;
-
-		if (info->selectedLODLevel >= parsedData->lods.size())
-			info->selectedLODLevel = 0;
-
-		g_rsxSettings.previewedSkinIndex = static_cast<int>(info->selectedSkinIndex);
 
 		if (parsedData->bodyParts.at(info->selectedBodypartIndex).numModels > 1)
 		{
@@ -2467,28 +1860,27 @@ void* PreviewParsedData(ModelPreviewInfo_t* const info, ModelParsedData_t* const
 	}
 
 	// Load these first so we don't have to look them up for every mesh.
-#if (ADVANCED_MODEL_PREVIEW)
+#if defined(ADVANCED_MODEL_PREVIEW)
 	const CShader* const vertexShader = g_dxHandler->GetShaderManager()->LoadShader("C:/p4/rtech_utils_imgui/src/shaders/amp_vs", eShaderType::Vertex);
 #else
-	const CShader* const vertexShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/model_vs", s_PreviewVertexShader, eShaderType::Vertex);
+	const CShader* const vertexShader = g_dxHandler->GetShaderManager()->LoadShader("shaders/model_vs", eShaderType::Vertex);
 #endif
-	const CShader* const pixelShader = g_dxHandler->GetShaderManager()->LoadShaderFromString("shaders/model_ps", s_PreviewPixelShader, eShaderType::Pixel);
+	const CShader* const pixelShader = g_dxHandler->GetShaderManager()->LoadShader("shaders/model_ps", eShaderType::Pixel);
 
+	// [rika]: our currently selected skin
 	const ModelSkinData_t& skinData = parsedData->skins.at(info->selectedSkinIndex);
 	for (size_t i = 0; i < lodData.meshes.size(); ++i)
 	{
 		const ModelMeshData_t& mesh = lodData.meshes.at(i);
 		DXMeshDrawData_t* const meshDrawData = &drawData->meshBuffers[i];
 
-		meshDrawData->indexFormat = DXGI_FORMAT_R16_UINT; // uint16_t
-		meshDrawData->wireframe = false;
+		meshDrawData->indexFormat = DXGI_FORMAT_R16_UINT;
 
-		// If this mesh belongs to a bodypart that is not selected, we should set it to be invisible
+		// If this body part is disabled, don't draw the mesh.
 		drawData->meshBuffers[i].visible = parsedData->bodyParts[mesh.bodyPartIndex].IsPreviewEnabled();
 
 		const ModelBodyPart_t& bodypart = parsedData->bodyParts[mesh.bodyPartIndex];
 		const ModelModelData_t& model = lodData.models.at(bodypart.modelIndex + info->bodygroupModelSelected.at(mesh.bodyPartIndex));
-		
 		if (i >= model.meshIndex && i < model.meshIndex + model.meshCount)
 			drawData->meshBuffers[i].visible = true;
 		else
@@ -2508,7 +1900,7 @@ void* PreviewParsedData(ModelPreviewInfo_t* const info, ModelParsedData_t* const
 
 		const MaterialAsset* const matl = reinterpret_cast<MaterialAsset*>(matlAsset->extraData());
 
-#if (ADVANCED_MODEL_PREVIEW)
+#if defined(ADVANCED_MODEL_PREVIEW)
 		// If the material has a valid shaderset loaded, try and grab its shaders to use for this mesh's advanced model preview
 		if (matl->shaderSetAsset)
 		{
@@ -2537,28 +1929,16 @@ void* PreviewParsedData(ModelPreviewInfo_t* const info, ModelParsedData_t* const
 				if (texEntry.asset)
 				{
 					TextureAsset* txtr = reinterpret_cast<TextureAsset*>(texEntry.asset->extraData());
-
-					for (auto& mip : txtr->mipArray | std::views::reverse)
-					{
-						// Find the highest mip in the texture's mip array that is loaded
-						if (mip.isLoaded)
-						{
-							const std::shared_ptr<CTexture> highestTextureMip = CreateTextureFromMip(texEntry.asset, &mip, s_PakToDxgiFormat[txtr->imgFormat]);
-							meshDrawData->textures.push_back({ texEntry.index, highestTextureMip });
-
-							break;
-						}
-					}
+					const std::shared_ptr<CTexture> highestTextureMip = CreateTextureFromMip(texEntry.asset, &txtr->mipArray[txtr->mipArray.size() - 1], s_PakToDxgiFormat[txtr->imgFormat]);
+					meshDrawData->textures.push_back({ texEntry.index, highestTextureMip });
 				}
 			}
 		}
 	}
 
-#if defined(HAS_BONED_MODELS)
 	// Map some (potentially incorrect) bone data
 	if (!drawData->boneMatrixBuffer)
 		InitModelBoneMatrix(drawData, parsedData);
-#endif
 
 	Preview_MapTransformsBuffer(drawData);
 	Preview_MapModelInstanceBuffer(drawData);
@@ -2581,7 +1961,6 @@ void PreviewAnimDesc(const ModelAnim_t* const animdesc, const int index)
 
 		ImGui::Text("Frame Rate: %f", animdesc->fps);
 		ImGui::Text("Frame Count: %i", animdesc->numframes);
-		ImGui::Text("Duration: %.3f seconds", animdesc->Duration());
 
 		ImGui::TreePop();
 	}

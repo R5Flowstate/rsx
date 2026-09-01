@@ -6,13 +6,22 @@ extern CBufferManager g_BufferManager;
 
 void ExportAssetListCSVToFileStream(std::vector<CGlobalAssetData::AssetLookup_t>* assets, std::ofstream* ofs)
 {
-    *ofs << "type,guid,file_name,asset_name\n";
+    *ofs << "type,pakver,rsxver,guid,file_name,asset_name\n";
     for (size_t i = 0; i < assets->size(); ++i)
     {
         const CGlobalAssetData::AssetLookup_t& it = assets->at(i);
 
-        *ofs << fourCCToString(it.m_asset->GetAssetType(), true) << "," << std::hex << it.m_guid << "," << it.m_asset->GetContainerFileName() << "," << it.m_asset->GetAssetName();
-        
+        // raw RPak asset-entry version int (what the engine asset-binding switches on);
+        // -1 for non-pak containers (mdl/audio/bpk) where it does not apply.
+        int pakVer = -1;
+        if (it.m_asset->GetAssetContainerType() == CAsset::ContainerType::PAK)
+            pakVer = reinterpret_cast<CPakAsset*>(it.m_asset)->version();
+
+        *ofs << fourCCToString(it.m_asset->GetAssetType(), true) << ","
+             << std::dec << pakVer << ","
+             << it.m_asset->GetAssetVersion().ToString() << ","
+             << std::hex << it.m_guid << "," << it.m_asset->GetContainerFileName() << "," << it.m_asset->GetAssetName();
+
         if(i != assets->size()-1)
             *ofs << "\n";
     }
@@ -39,26 +48,26 @@ void ExportDependenciesToFileStream_AdjList(std::vector<CGlobalAssetData::AssetL
         const CGlobalAssetData::AssetLookup_t& it = assets->at(i);
 
         // For now this is only usable on rpaks
-        if (it.m_asset->GetAssetContainerType() != CAssetContainer::ContainerType::PAK)
-            continue;
-
-        *ofs << it.m_asset->GetAssetName();
-
-        CPakAsset* pakAsset = reinterpret_cast<CPakAsset*>(it.m_asset);
-
-        std::vector<AssetGuid_t> dependencies;
-        pakAsset->getDependencies(dependencies);
-
-        for (size_t depIdx = 0; depIdx < dependencies.size(); ++depIdx)
+        if (it.m_asset->GetAssetContainerType() == CAssetContainer::ContainerType::PAK)
         {
-            const AssetGuid_t depGuid = dependencies[depIdx];
+            *ofs << it.m_asset->GetAssetName();
 
-            CAsset* depAsset = g_assetData.FindAssetByGUID<CPakAsset>(depGuid.guid);
+            CPakAsset* pakAsset = reinterpret_cast<CPakAsset*>(it.m_asset);
 
-            if (depAsset)
-                *ofs << "," << depAsset->GetAssetName();
-            else
-                *ofs << "," << std::format("{:016X}*", depGuid.guid);
+            std::vector<AssetGuid_t> dependencies;
+            pakAsset->getDependencies(dependencies);
+
+            for (size_t depIdx = 0; depIdx < dependencies.size(); ++depIdx)
+            {
+                const AssetGuid_t depGuid = dependencies[depIdx];
+
+                CAsset* depAsset = g_assetData.FindAssetByGUID<CPakAsset>(depGuid.guid);
+
+                if (depAsset)
+                    *ofs << "," << depAsset->GetAssetName();
+                else
+                    *ofs << "," << std::format("{:016X}*", depGuid.guid);
+            }
         }
 
         if (i != assets->size() - 1)
@@ -79,7 +88,7 @@ void HandleListExportPakAssets(const HWND handle, std::vector<CGlobalAssetData::
     HandleListExport(handle, assetNames);
 }
 
-void HandleListExport(const HWND handle, const std::vector<std::string>& listElements)
+void HandleListExport(const HWND handle, std::vector<std::string> listElements)
 {
     // We are in pak load now.
     //inJobAction = true;

@@ -2,11 +2,11 @@
 #include <game/rtech/assets/ui_image.h>
 
 #include <core/render/dx.h>
+#include <core/utils/fileio.h>
 #include <thirdparty/imgui/imgui.h>
-#include <core/render/ui/styles.h>
 
 extern CDXParentHandler* g_dxHandler;
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 void LoadUIImageAsset(CAssetContainer* const pak, CAsset* const asset)
 {
@@ -210,6 +210,21 @@ void LoadUIImageAsset(CAssetContainer* const pak, CAsset* const asset)
     GetNumOfBcBlocks(uiAsset, eUIImageTileType::TYPE_LQ);
 
     pakAsset->setExtraData(uiAsset);
+}
+
+void PostLoadUIImageAsset(CAssetContainer* container, CAsset* asset)
+{
+    UNUSED(container);
+
+    CPakAsset* pakAsset = static_cast<CPakAsset*>(asset);
+
+    if (!pakAsset->extraData())
+        return;
+
+    UIImageAsset* const uiAsset = reinterpret_cast<UIImageAsset*>(pakAsset->extraData());
+
+    if (!uiAsset->name)
+        pakAsset->SetAssetNameFromCache();
 }
 
 // Or swizzle work..
@@ -481,20 +496,6 @@ std::shared_ptr<CTexture> CreateTextureForImage(CPakAsset* const asset, UIImageA
     return std::move(uiTexture);
 };
 
-std::shared_ptr<CTexture> UIIA_GetHighestTexture(CPakAsset* pakAsset, UIImageAsset* uiia)
-{
-
-    const UIImageAsset::QualityData* const qualData = &uiia->resData[eUIImageResType::LQ_RES];
-
-    // in the future, we should probably load LQ only if streamed data is not present ? (since HQ is using LQ data at that point)
-    std::shared_ptr<CTexture> tex = CreateTextureForImage(pakAsset, uiia, qualData, uiia->shouldStream, true);
-
-    if (tex)
-        tex->CreateShaderResourceView(g_dxHandler->GetDevice());
-
-    return tex;
-}
-
 #undef max
 void* PreviewUIImageAsset(CAsset* const asset, const bool firstFrameForAsset)
 {
@@ -554,7 +555,7 @@ void* PreviewUIImageAsset(CAsset* const asset, const bool firstFrameForAsset)
         {
             if (!uiAsset->shouldStream && selectedUIImage == eUIImageTileType::TYPE_HQ)
             {
-                ImGui::PushStyleColor(ImGuiCol_Text, Styles::TEXTCOL_NOT_LOADED);
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.f, 0.f, 1.f));
                 ImGui::TextUnformatted("Not Loaded");
                 ImGui::PopStyleColor();
             }
@@ -669,6 +670,7 @@ enum eUIImageExportSetting
     PNG_LQ, // PNG (Low Quality)
     DDS_HQ, // DDS (High Quality)
     DDS_LQ, // DDS (Low Quality)
+    RAW_UIIA, // RAW (re-packable .uiia container for Repak)
 };
 
 static bool ExportPngUIImageAsset(CPakAsset* const asset, UIImageAsset* const uiAsset, std::filesystem::path& exportPath, const int setting)
@@ -751,13 +753,142 @@ static bool ExportDdsUIImageAsset(CPakAsset* const asset, UIImageAsset* const ui
     unreachable();
 }
 
+// Re-packable .uiia: ['UIIA'][nReloc][relocOffs][subheader][rawData]. Relocs are rawData-relative.
+static bool ExportRawUIImageAsset(CPakAsset* const asset, std::filesystem::path& exportPath)
+{
+    CPakFile* const pak = asset->GetContainerFile<CPakFile>();
+    if (!pak)
+    {
+        printf("[UIIA-RAW] no container pak for asset 0x%llX\n", asset->GetAssetGUID());
+        return false;
+    }
+
+    const char* const subhdr = reinterpret_cast<const char*>(asset->header());
+    const uint32_t subhdrSize = asset->data()->headerStructSize;
+    if (!subhdr || subhdrSize == 0)
+    {
+        printf("[UIIA-RAW] invalid subheader for asset 0x%llX (size=%u)\n", asset->GetAssetGUID(), subhdrSize);
+        return false;
+    }
+
+    const char* const rawData = asset->cpu();
+    const std::vector<char*>& pageBuffers = pak->GetPageBuffers();
+    const PakPageHdr_t* const pageHeaders = pak->header()->GetPageHeaders();
+    const int pageCount = pak->pageCount();
+
+    // Map an in-memory resolved pointer back to its on-disk PagePtr (pageIndex, offsetWithinPage).
+    auto ResolveToPagePtr = [&](const char* const ptr, int& outPageIdx, uint32_t& outOff) -> bool
+    {
+        for (int p = 0; p < pageCount; ++p)
+        {
+            char* const pageStart = pageBuffers[p];
+            if (!pageStart)
+                continue;
+            const uint32_t pageSize = pageHeaders[p].size;
+            if (ptr >= pageStart && ptr < pageStart + pageSize)
+            {
+                outPageIdx = p;
+                outOff = static_cast<uint32_t>(ptr - pageStart);
+                return true;
+            }
+        }
+        return false;
+    };
+
+    int rawPageIdx = -1;
+    uint32_t rawDataSize = 0;
+    std::vector<uint32_t> relocOffs;
+    std::unique_ptr<char[]> rawBuf; // a relocated COPY of the rawData blob (on-disk PagePtr form)
+
+    if (rawData)
+    {
+        uint32_t rawDataBaseOff = 0;
+        if (!ResolveToPagePtr(rawData, rawPageIdx, rawDataBaseOff))
+        {
+            printf("[UIIA-RAW] rawData pointer not in any page for asset 0x%llX\n", asset->GetAssetGUID());
+            return false;
+        }
+        // rawData blob runs from the data pointer to the end of its page.
+        rawDataSize = pageHeaders[rawPageIdx].size - rawDataBaseOff;
+
+        // Copy the blob so we can de-relocate self-pointers back to the on-disk index/offset form
+        // the pak stored them as (the engine resolved them to absolute addresses at load). Repak's
+        // reader reconstructs the runtime pointers via AddPointer, reading each target offset from
+        // the de-relocated value, so we must restore that on-disk shape for byte-parity.
+        rawBuf = std::make_unique<char[]>(rawDataSize);
+        memcpy(rawBuf.get(), rawData, rawDataSize);
+
+        const PakPointerHdr_t* const ptrHeaders = pak->GetPointerHeaders();
+        for (int i = 0; i < pak->pointerCount(); ++i)
+        {
+            if (ptrHeaders[i].index != rawPageIdx)
+                continue;
+
+            const uint32_t srcOff = static_cast<uint32_t>(ptrHeaders[i].offset);
+            if (srcOff < rawDataBaseOff)
+                continue; // pointer precedes our rawData slice within the page
+            const uint32_t relOff = srcOff - rawDataBaseOff;
+            if (static_cast<size_t>(relOff) + sizeof(PagePtr_t) > rawDataSize)
+                continue; // defensive: pointer field would run past the blob
+
+            // Read the resolved absolute pointer the engine wrote here, map it back to a PagePtr.
+            char* const resolvedPtr = *reinterpret_cast<char* const*>(rawData + relOff);
+            PagePtr_t pp{};
+            int tgtPageIdx = -1;
+            uint32_t tgtOff = 0;
+            if (resolvedPtr && ResolveToPagePtr(resolvedPtr, tgtPageIdx, tgtOff))
+            {
+                pp.index = tgtPageIdx;
+                pp.offset = static_cast<int>(tgtOff);
+            }
+            else
+            {
+                pp.index = 0;
+                pp.offset = 0;
+            }
+            // overwrite the resolved pointer with the on-disk index/offset PagePtr form
+            memcpy(rawBuf.get() + relOff, &pp, sizeof(pp));
+
+            relocOffs.push_back(relOff);
+        }
+        std::sort(relocOffs.begin(), relocOffs.end());
+    }
+
+    exportPath.replace_extension("uiia");
+
+    StreamIO rawIO;
+    if (!rawIO.open(exportPath.string(), eStreamIOMode::Write))
+    {
+        printf("[UIIA-RAW] failed to open '%s' for write\n", exportPath.string().c_str());
+        return false;
+    }
+
+    const uint32_t fileMagic = 0x41494955u; // 'UIIA'
+    const uint32_t nReloc = static_cast<uint32_t>(relocOffs.size());
+    rawIO.write(reinterpret_cast<const char*>(&fileMagic), sizeof(fileMagic));
+    rawIO.write(reinterpret_cast<const char*>(&nReloc), sizeof(nReloc));
+    for (const uint32_t off : relocOffs)
+        rawIO.write(reinterpret_cast<const char*>(&off), sizeof(off));
+
+    rawIO.write(subhdr, subhdrSize);
+    if (rawDataSize > 0)
+        rawIO.write(rawBuf.get(), rawDataSize);
+
+    rawIO.close();
+
+    printf("[UIIA-RAW] wrote '%s' subhdr=%uB raw=%uB relocs=%u\n",
+        exportPath.string().c_str(), subhdrSize, rawDataSize, nReloc);
+
+    return true;
+}
+
 bool ExportUIImageAsset(CAsset* const asset, const int setting)
 {
     CPakAsset* pakAsset = static_cast<CPakAsset*>(asset);
     UIImageAsset* const uiAsset = reinterpret_cast<UIImageAsset*>(pakAsset->extraData());
 
     // Create exported path + asset path.
-    std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory() / fourCCToString(asset->GetAssetType());
+    std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory() / fourCCToString(asset->GetAssetType());
 
     if (!CreateDirectories(exportPath))
     {
@@ -784,6 +915,10 @@ bool ExportUIImageAsset(CAsset* const asset, const int setting)
     {
         return ExportDdsUIImageAsset(pakAsset, uiAsset, exportPath, setting);
     }
+    case eUIImageExportSetting::RAW_UIIA:
+    {
+        return ExportRawUIImageAsset(pakAsset, exportPath);
+    }
     default:
     {
         assertm(false, "Export setting is not handled.");
@@ -796,16 +931,17 @@ bool ExportUIImageAsset(CAsset* const asset, const int setting)
 
 void InitUIImageAssetType()
 {
-    static const char* settings[] = { "PNG (High Quality)", "PNG (Low Quality)", "DDS (High Quality)", "DDS (Low Quality)" };
+    static const char* settings[] = { "PNG (High Quality)", "PNG (Low Quality)", "DDS (High Quality)", "DDS (Low Quality)", "RAW (.uiia for Repak)" };
+	// [cafe]: -nogui default is RAW_UIIA so headless extract yields a re-packable .uiia.
     AssetTypeBinding_t type =
     {
         .name = "UI Image",
         .type = 'aiiu',
         .headerAlignment = 8,
         .loadFunc = LoadUIImageAsset,
-        .postLoadFunc = nullptr,
+        .postLoadFunc = PostLoadUIImageAsset,
         .previewFunc = PreviewUIImageAsset,
-        .e = { ExportUIImageAsset, 0, settings, ARRSIZE(settings) },
+        .e = { ExportUIImageAsset, eUIImageExportSetting::RAW_UIIA, settings, ARRSIZE(settings) },
     };
 
     REGISTER_TYPE(type);

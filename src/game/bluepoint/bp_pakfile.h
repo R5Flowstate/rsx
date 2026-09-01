@@ -6,8 +6,6 @@
 
 #define BP_PAK_FILENAME_SIZE 64
 
-constexpr uint32_t BP_ASSET_TYPE_ID = 0x66777062; // "bpwf" - bluepoint wrapped file
-
 struct bpkfile_v6_t
 {
     int hash[2]; // first 8 bytes of the sha1 hash of the filename
@@ -126,12 +124,12 @@ public:
     void SetFileName(const char* fileName) { strncpy_s(m_fileName, 64, fileName, strnlen_s(fileName, 64)); }
     const char* const GetFileName() const { return m_fileName; }
 
-    inline const int32_t Version() const { return m_version; }
-    inline const int32_t FileCount() const { return m_fileCount; }
+    inline const int Version() const { return m_version; }
+    inline const int FileCount() const { return m_fileCount; }
     inline void* const Files() { return m_files; }
     inline char* const FileBuf() { return m_Buf.get(); }
 
-    inline const int32_t GetMaxChunkSize() const { return m_chunkSize; }
+    inline const int GetMaxChunkSize() const { return m_chunkSize; }
 
     bool ParseFromFile();
 
@@ -148,15 +146,15 @@ public:
 private:
     char m_fileName[BP_PAK_FILENAME_SIZE];
 
-    int32_t m_version;
+    int m_version;
 
-    int32_t m_fileCount;
-    int32_t m_patchCount;
+    int m_fileCount;
+    int m_patchCount;
 
     void* m_files;
     bpkpatch_t* m_patches;
 
-    int32_t m_chunkSize;
+    int m_chunkSize;
     std::vector<Chunk_t> m_chunks;
 
     std::shared_ptr<char[]> m_Buf;

@@ -15,7 +15,7 @@ void LoadAnimRecordingAsset(CAssetContainer* const container, CAsset* const asse
     pakAsset->SetAssetNameFromCache();
 }
 
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 static const char* const s_PathPrefixANIR = s_AssetTypePaths.find(AssetType_t::ANIR)->second;
 
 static bool ExportAnimRecordingAsset(CAsset* const asset, const int setting)
@@ -28,11 +28,11 @@ static bool ExportAnimRecordingAsset(CAsset* const asset, const int setting)
         return false; // 1 is currently the only supported version.
 
     // Create exported path + asset path.
-    std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+    std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
     const std::filesystem::path anirPath(pakAsset->GetAssetName());
 
     // truncate paths?
-    if (g_rsxSettings.exportPathsFull)
+    if (g_ExportSettings.exportPathsFull)
         exportPath.append(anirPath.parent_path().string());
     else
         exportPath.append(s_PathPrefixANIR);

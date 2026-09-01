@@ -206,9 +206,15 @@ public:
         }
 
         numShaders = shaderCount;
+
+        // preserve the real feature bytes (envType + envOptScales[0..5] +
+        // isReference) so MSW export is re-packable. NOTE: hdr->unk_9 is 9 bytes but
+        // shaderFeatures is only 8 -> copy exactly sizeof(shaderFeatures) (8) to avoid
+        // a memcpy_s count>destsize fast-fail. 8 bytes covers unk_9[0..7].
+        memcpy_s(shaderFeatures, sizeof(shaderFeatures), &hdr->unk_9, sizeof(shaderFeatures));
     }
 
-#if (ADVANCED_MODEL_PREVIEW) // shader instances are only created when AMP is enabled
+#if defined(ADVANCED_MODEL_PREVIEW) // shader instances are only created when AMP is enabled
     ~ShaderAsset()
     {
         if (!data)

@@ -15,82 +15,64 @@ function Write-VSParsableErrorAndExit {
     exit $ExitCode
 }
 
-
 if (-not $projectDir) {
     Write-VSParsableErrorAndExit "Missing `projectDir` param" 1
 }
 
-function Write-UECDNFile {
-    param (
-        [string]$RemotePath,
-        [string]$PackHash,
-        [string]$OutputPath,
-        [int]$FileOffset,
-        [int]$FileSize,
-        [int]$PackUncompressedSize,
-        [string]$FileExpectedHash
-    )
+$URL = "https://cdn.unrealengine.com/dependencies/UnrealEngine-40594131/3578368bc5d11cd2e80c63f7063c2828954c1562"
+$OUT_PATH = Join-Path $projectDir "\thirdparty\radaudio\radaudio_decoder_win64.lib"
+$START_OFFSET = 1693906
+$SIZE = 330314
+$PACK_UNCOMPRESSED_SIZE = 2024220
+$RADA_HASH = "F7089A7A48B304CB54D00EB2BB75FD56A30923550BA4B74BAAE6FD7697BD1807"
 
-    if (Test-Path $OutputPath) {
-        return
-    }
-
-    $Url = "https://cdn.unrealengine.com/dependencies/$RemotePath/$PackHash"
-    try {
-        $response = Invoke-WebRequest -Uri $Url -UseBasicParsing
-    }
-    catch {
-        Write-VSParsableErrorAndExit "Error during request to UE CDN for $OutputPath; $_" 2
-    }
-
-    try {
-        $gzipStream = New-Object System.IO.Compression.GzipStream(
-            $response.RawContentStream,
-            [System.IO.Compression.CompressionMode]::Decompress
-        )
-        $memoryStream = New-Object System.IO.MemoryStream
-        $gzipStream.CopyTo($memoryStream)
-        $decompressedData = $memoryStream.ToArray()
-    }
-    catch {
-        Write-VSParsableErrorAndExit "Error during decompression for $OutputPath; $_" 3
-    }
-    finally {
-        if ($gzipStream) { $gzipStream.Dispose() }
-        if ($memoryStream) { $memoryStream.Dispose() }
-    }
-
-    if ($decompressedData.Length -ne $PackUncompressedSize) {
-        Write-VSParsableErrorAndExit "Decompressed data size mismatch for $OutputPath; expected $PackUncompressedSize, got $($decompressedData.Length)" 4
-    }
-
-    $dataSlice = $decompressedData[$FileOffset..($FileOffset + $FileSize - 1)]
-
-
-    $sha256 = [System.Security.Cryptography.SHA256]::Create()
-    $hashBytes = $sha256.ComputeHash($dataSlice)
-    $hash = [BitConverter]::ToString($hashBytes).Replace("-", "")
-
-    if ($hash.ToUpper() -ne $FileExpectedHash.ToUpper()) {
-        Write-VSParsableErrorAndExit "SHA-256 hash mismatch for $OutputPath; got $hash" 5
-    }
-    
-    try {
-        [System.IO.File]::WriteAllBytes($OutputPath, $dataSlice)
-    }
-    catch {
-        Write-VSParsableErrorAndExit "Error writing file to $OutputPath; $_" 6
-    }
+if (Test-Path $OUT_PATH) {
+    exit 0
 }
 
-$OUT_PATH = Join-Path $projectDir "\thirdparty\binka\binka_ue_decode_win64_static_x64D.lib"
-Write-UECDNFile "UnrealEngine-31312565" "7e2a40af2d9721f69c43e48fee940332c37cf3c4" $OUT_PATH 797396 452462 1920810 "F1CD322361BFDF25708E06CD4941DFC50D59C9C6EFAA3C87E383F51E71EB87B5"
+try {
+    $response = Invoke-WebRequest -Uri $URL -UseBasicParsing
+}
+catch {
+    Write-VSParsableErrorAndExit "Error during request to UE CDN: $_" 2
+}
 
-$OUT_PATH = Join-Path $projectDir "\thirdparty\binka\binka_ue_decode_win64_static_x64.lib"
-Write-UECDNFile "UnrealEngine-25887585" "9ce4a076844fff6f758111f2d38b6dbabbc2ecee" $OUT_PATH 8 149056 327040 "63A0B56048090841A1D867924B65C4273C6C929DF3A616527F0C671956C114B9"
+try {
+    $gzipStream = New-Object System.IO.Compression.GzipStream(
+        $response.RawContentStream,
+        [System.IO.Compression.CompressionMode]::Decompress
+    )
+    $memoryStream = New-Object System.IO.MemoryStream
+    $gzipStream.CopyTo($memoryStream)
+    $decompressedData = $memoryStream.ToArray()
+}
+catch {
+    Write-VSParsableErrorAndExit "Error during decompression: $_" 3
+}
+finally {
+    if ($gzipStream) { $gzipStream.Dispose() }
+    if ($memoryStream) { $memoryStream.Dispose() }
+}
 
-$OUT_PATH = Join-Path $projectDir "\thirdparty\radaudio\radaudio_decoder_win64.lib"
-Write-UECDNFile "UnrealEngine-40594131" "3578368bc5d11cd2e80c63f7063c2828954c1562" $OUT_PATH 1693906 330314 2024220 "F7089A7A48B304CB54D00EB2BB75FD56A30923550BA4B74BAAE6FD7697BD1807"
+if ($decompressedData.Length -ne $PACK_UNCOMPRESSED_SIZE) {
+    Write-VSParsableErrorAndExit "Decompressed data size mismatch; expected $PACK_UNCOMPRESSED_SIZE, got $($decompressedData.Length)" 4
+}
 
+$dataSlice = $decompressedData[$START_OFFSET..($START_OFFSET + $SIZE - 1)]
+
+$sha256 = [System.Security.Cryptography.SHA256]::Create()
+$hashBytes = $sha256.ComputeHash($dataSlice)
+$hash = [BitConverter]::ToString($hashBytes).Replace("-", "")
+
+if ($hash.ToUpper() -ne $RADA_HASH.ToUpper()) {
+    Write-VSParsableErrorAndExit "SHA-256 hash mismatch; got $hash" 5
+}
+
+try {
+    [System.IO.File]::WriteAllBytes($OUT_PATH, $dataSlice)
+}
+catch {
+    Write-VSParsableErrorAndExit "Error writing file to $($OUT_PATH): $_" 6
+}
 
 exit 0

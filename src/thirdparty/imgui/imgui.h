@@ -2852,7 +2852,7 @@ struct ImGuiTextFilter
         bool            empty() const { return b == e; }
         IMGUI_API void  split(char separator, ImVector<ImGuiTextRange>* out) const;
     };
-    char                    InputBuf[256];
+    char                    InputBuf[4096000];
     ImVector<ImGuiTextRange>Filters;
     int                     CountGrep;
 };

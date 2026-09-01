@@ -12,6 +12,7 @@
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
+#include <set>
 #include <vector>
 #include <memory>
 #include <sstream>
@@ -30,6 +31,7 @@
 #define NOMINMAX
 #endif
 #include <Windows.h>
+#include <mmsystem.h>
 #include <io.h>
 
 #include <core/features.h>
@@ -59,13 +61,6 @@
 
 #include <core/cache/cachedb.h>
 
-#include <rapidjson/rapidjson.h>
-#include "rapidjson/document.h"
-#include "rapidjson/writer.h"
-#include "rapidjson/stringbuffer.h"
-#include "rapidjson/prettywriter.h"
-#include "rapidjson/error/en.h"
-
 #pragma warning (disable: 4201)
 
 #define DISABLE_WARNING(num) \
@@ -94,7 +89,6 @@
     #define ASSERTS
     #define PAKLOAD_DEBUG_LOG 1
 #else
-    //#define SPLASHSCREEN
     #define EXCEPTION_HANDLER
     #define PAKLOAD_DEBUG_LOG 0
 #endif // #ifdef _DEBUG
@@ -123,21 +117,7 @@
 #define PAKLOAD_PATCHING_ANY
 #endif
 
+#define MILES_RADAUDIO
 //#define XB_XECRPYT
 //#define XB_XCOMPRESS
 #define SWITCH_SWIZZLE
-
-#if defined(BUILD_NOGUI)
-#define IS_NOGUI(...) (true)
-#else
-#define IS_NOGUI(cli) ((cli) && (cli)->HasParam("-nogui"))
-#endif
-
-#define DO_ASSET_LOAD() !g_assetData.m_validate || g_assetData.m_validateAssetLoading
-
-
-#define CONCAT(a, b) XCONCAT(a, b)
-#define XCONCAT(a, b) a ## b
-#define UNIQUE_VAR() CONCAT(__unique_, __COUNTER__)
-
-#include "core/features.h"

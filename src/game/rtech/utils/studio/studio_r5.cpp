@@ -28,6 +28,31 @@ namespace r5
 		return (s_AnimSeekLUT[lutBaseIdx] + ((s_AnimSeekLUT[lutBaseIdx + 1] + panimvalue->num.total * s_AnimSeekLUT[lutBaseIdx + 2]) >> 4));
 	}
 
+	// [cafe] Backstop against corrupt/short anim data. Well-formed tracks never hit this.
+	static constexpr int MAX_ANIMVALUE_RUNS = 0x20000;
+
+	// Walk the RLE run list to the run containing local frame k. Reject total==0, seek<=0, or a runaway walk.
+	static inline bool SeekAnimValueRun(const mstudioanimvalue_t*& panimvalue, int& k)
+	{
+		int walked = 0;
+		while (panimvalue->num.total <= k)
+		{
+			const int seek = GetAnimValueOffset(panimvalue);
+			if (panimvalue->num.total == 0 || seek <= 0 || ++walked > MAX_ANIMVALUE_RUNS)
+			{
+				static std::atomic<uint32_t> s_trips{ 0 };
+				if (s_trips.fetch_add(1, std::memory_order_relaxed) == 0)
+					printf("[RSX][WARN] ExtractAnimValue: malformed anim run (total=%d valid=%d seek=%d rem=%d) -- "
+						   "using a default value instead of hanging/over-reading; further warnings suppressed.\n",
+						   panimvalue->num.total, panimvalue->num.valid, seek, k);
+				return false;
+			}
+			k -= panimvalue->num.total;
+			panimvalue += seek;
+		}
+		return true;
+	}
+
 	inline void ExtractAnimValue(const mstudioanimvalue_t* panimvalue, const int frame, const float scale, float& v1)
 	{
 		// note: in R5 'valid' is not really used the same way as traditional source.
@@ -111,11 +136,7 @@ namespace r5
 		int k = frame;
 
 		// [rika]: for obvious reasons this func gets inlined in CalcBone functions
-		while (panimvalue->num.total <= k)
-		{
-			k -= panimvalue->num.total;
-			panimvalue += GetAnimValueOffset(panimvalue);
-		}
+		if (!SeekAnimValueRun(panimvalue, k)) { v1 = 0.0f; return; }
 
 		ExtractAnimValue(panimvalue, k, scale, v1);
 	}
@@ -125,11 +146,7 @@ namespace r5
 		int k = frame;
 
 		// find the data list that has the frame
-		while (panimvalue->num.total <= k)
-		{
-			k -= panimvalue->num.total;
-			panimvalue += GetAnimValueOffset(panimvalue); // [rika]: this is a macro because I thought it was used more than once initally
-		}
+		if (!SeekAnimValueRun(panimvalue, k)) { v1 = 0.0f; v2 = 0.0f; return; }
 
 		// [rika]: check if our track index is the last value, if it is, our second value (v2) gets taken from the first frame of the next track
 		if (k >= panimvalue->num.total - 1)

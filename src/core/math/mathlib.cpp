@@ -119,10 +119,14 @@ __forceinline __m128 QuaternionBlendSIMD(const __m128& p, const __m128& q, float
 void QuaternionBlend(const Quaternion& p, const Quaternion& q, float t, Quaternion& qt)
 {
 #if MATH_SIMD
-	__m128 psimd = _mm_load_ps(p.Base());
-	__m128 qsimd = _mm_load_ps(q.Base());
+	// Quaternion/RadianEuler/QAngle are only 4-byte aligned; callers pass stack locals that can
+	// land non-16-aligned, so aligned SIMD mem ops (_mm_load_ps/_mm_store_ps) #GP-fault here
+	// (the angel_city model-extract crash path, CalcBoneQuaternion). Unaligned variants are
+	// identical in result and survive any caller alignment.
+	__m128 psimd = _mm_loadu_ps(p.Base());
+	__m128 qsimd = _mm_loadu_ps(q.Base());
 	__m128 qtsimd = QuaternionBlendSIMD(psimd, qsimd, t);
-	_mm_store_ps(qt.Base(), qtsimd);
+	_mm_storeu_ps(qt.Base(), qtsimd);
 #else
 	// decide if one of the quaternions is backwards
 	Quaternion q2;
@@ -314,7 +318,7 @@ void AngleQuaternion(const QAngle& angles, Quaternion& outQuat)
 
 #if MATH_SIMD
 	__m128 degrees, /*scale,*/ sine, cosine;
-	degrees = _mm_load_ps(angles.Base());
+	degrees = _mm_loadu_ps(angles.Base()); // QAngle is align-4; unaligned load (see RadianEuler overload)
 	//scale = ReplicateX4(DEG2RAD(0.5f));
 	degrees = _mm_mul_ps(degrees, aqScaleDegrees);
 
@@ -374,7 +378,11 @@ void AngleQuaternion(const RadianEuler& angles, Quaternion& outQuat)
 
 #if MATH_SIMD
 	__m128 radians, /*scale,*/ sine, cosine;
-	radians = _mm_load_ps(angles.Base());
+	// RadianEuler is 3 floats (align 4); callers pass stack locals that are NOT guaranteed
+	// 16-byte aligned (e.g. CalcBoneQuaternion's angle/angle1/angle2). An aligned _mm_load_ps
+	// there faults (mulps [mem] #GP) -- this was the angel_city model-extract crash the anim
+	// hang was masking. Use an unaligned load (the 4th lane is read-past-but-unused).
+	radians = _mm_loadu_ps(angles.Base());
 	//scale = ReplicateX4(0.5f);
 	radians = _mm_mul_ps(radians, aqScaleRadians);
 
@@ -442,96 +450,4 @@ void NormalizeAngles(QAngle& angles)
 			angles[i] += 360.0;
 		}
 	}
-}
-
-typedef __m128 fltx4;
-
-const uint32_t __declspec(align(16)) g_SIMD_ComponentMask[4][4] =
-{
-	{ 0xFFFFFFFF, 0, 0, 0 }, { 0, 0xFFFFFFFF, 0, 0 }, { 0, 0, 0xFFFFFFFF, 0 }, { 0, 0, 0, 0xFFFFFFFF }
-};
-
-FORCEINLINE fltx4 LoadUnalignedSIMD(const void* pSIMD)
-{
-	return *(reinterpret_cast<const fltx4*> (pSIMD));
-}
-
-FORCEINLINE void StoreUnalignedSIMD(float* pSIMD, const fltx4& a)
-{
-	_mm_storeu_ps(pSIMD, a);
-}
-
-#define MM_SHUFFLE_REV(a,b,c,d) _MM_SHUFFLE(d,c,b,a)
-
-FORCEINLINE fltx4 SplatXSIMD(fltx4 const& a)
-{
-	return _mm_shuffle_ps(a, a, MM_SHUFFLE_REV(0, 0, 0, 0));
-}
-
-FORCEINLINE fltx4 SplatYSIMD(fltx4 const& a)
-{
-	return _mm_shuffle_ps(a, a, MM_SHUFFLE_REV(1, 1, 1, 1));
-}
-
-FORCEINLINE fltx4 SplatZSIMD(fltx4 const& a)
-{
-	return _mm_shuffle_ps(a, a, MM_SHUFFLE_REV(2, 2, 2, 2));
-}
-
-FORCEINLINE fltx4 SplatWSIMD(fltx4 const& a)
-{
-	return _mm_shuffle_ps(a, a, _MM_SHUFFLE(3, 3, 3, 3));
-}
-
-void ConcatTransforms(const matrix3x4_t& in1, const matrix3x4_t& in2, matrix3x4_t& out)
-{
-	fltx4 lastMask = *(fltx4*)(&g_SIMD_ComponentMask[3]);
-	fltx4 rowA0 = LoadUnalignedSIMD(in1.m_flMatVal[0]);
-	fltx4 rowA1 = LoadUnalignedSIMD(in1.m_flMatVal[1]);
-	fltx4 rowA2 = LoadUnalignedSIMD(in1.m_flMatVal[2]);
-
-	fltx4 rowB0 = LoadUnalignedSIMD(in2.m_flMatVal[0]);
-	fltx4 rowB1 = LoadUnalignedSIMD(in2.m_flMatVal[1]);
-	fltx4 rowB2 = LoadUnalignedSIMD(in2.m_flMatVal[2]);
-
-	// now we have the rows of m0 and the columns of m1
-	// first output row
-	fltx4 A0 = SplatXSIMD(rowA0);
-	fltx4 A1 = SplatYSIMD(rowA0);
-	fltx4 A2 = SplatZSIMD(rowA0);
-	fltx4 mul00 = MulSIMD(A0, rowB0);
-	fltx4 mul01 = MulSIMD(A1, rowB1);
-	fltx4 mul02 = MulSIMD(A2, rowB2);
-	fltx4 out0 = AddSIMD(mul00, AddSIMD(mul01, mul02));
-
-	// second output row
-	A0 = SplatXSIMD(rowA1);
-	A1 = SplatYSIMD(rowA1);
-	A2 = SplatZSIMD(rowA1);
-	fltx4 mul10 = MulSIMD(A0, rowB0);
-	fltx4 mul11 = MulSIMD(A1, rowB1);
-	fltx4 mul12 = MulSIMD(A2, rowB2);
-	fltx4 out1 = AddSIMD(mul10, AddSIMD(mul11, mul12));
-
-	// third output row
-	A0 = SplatXSIMD(rowA2);
-	A1 = SplatYSIMD(rowA2);
-	A2 = SplatZSIMD(rowA2);
-	fltx4 mul20 = MulSIMD(A0, rowB0);
-	fltx4 mul21 = MulSIMD(A1, rowB1);
-	fltx4 mul22 = MulSIMD(A2, rowB2);
-	fltx4 out2 = AddSIMD(mul20, AddSIMD(mul21, mul22));
-
-	// add in translation vector
-	A0 = AndSIMD(rowA0, lastMask);
-	A1 = AndSIMD(rowA1, lastMask);
-	A2 = AndSIMD(rowA2, lastMask);
-	out0 = AddSIMD(out0, A0);
-	out1 = AddSIMD(out1, A1);
-	out2 = AddSIMD(out2, A2);
-
-	// write to output
-	StoreUnalignedSIMD(out.m_flMatVal[0], out0);
-	StoreUnalignedSIMD(out.m_flMatVal[1], out1);
-	StoreUnalignedSIMD(out.m_flMatVal[2], out2);
 }

@@ -1,12 +1,11 @@
 #include <pch.h>
 #include <core/utils/cli_parser.h>
-#include <core/utils/utils_general.h>
 
-std::unordered_set<uint32_t> CLI_GetCommaSeparatedAssetTypes(const CCommandLine* const cli, const char* const paramName)
+std::vector<uint32_t> GetExportFilterTypes(const CCommandLine* const cli)
 {
-	std::unordered_set<uint32_t> types;
+	std::vector<uint32_t> types;
 
-	const char* const typeString = cli->GetParamValue(paramName);
+	const char* const typeString = cli->GetParamValue("--exporttypes");
 
 	if (!typeString)
 		return types;
@@ -27,7 +26,7 @@ std::unordered_set<uint32_t> CLI_GetCommaSeparatedAssetTypes(const CCommandLine*
 		const char c = typeLength >= 3 ? line[2] : '\0';
 		const char d = typeLength >= 4 ? line[3] : '\0';
 
-		types.insert(MAKEFOURCC(a, b, c, d));
+		types.push_back(MAKEFOURCC(a, b, c, d));
 	}
 
 	// this code is terrible
@@ -44,15 +43,8 @@ std::unordered_set<uint32_t> CLI_GetCommaSeparatedAssetTypes(const CCommandLine*
 
 		// If there's no delimiter, then there is only one specified type so add it to the vector
 		if (!foundComma)
-			types.insert(MAKEFOURCC(typeString[0], typeString[1], typeString[2], typeString[3]));
+			types.push_back(MAKEFOURCC(typeString[0], typeString[1], typeString[2], typeString[3]));
 	}
 
 	return types;
 }
-
-void GetTextFilterForExport(const char* filterString, TextFilter* filter)
-{
-	if(filterString)
-		filter->Build(filterString);
-}
-

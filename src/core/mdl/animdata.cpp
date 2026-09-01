@@ -4,7 +4,7 @@
 #include <core/mdl/animdata.h>
 
 extern CBufferManager g_BufferManager;
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 
 //
@@ -49,11 +49,9 @@ ModelFrameMovement_t::ModelFrameMovement_t(const r5::mstudioframemovement_t* con
 }
 
 // animdesc
-ModelAnim_t::ModelAnim_t(const ModelAnim_t& animdesc) : baseptr(animdesc.baseptr), name(animdesc.name), fps(animdesc.fps),
-	flags(animdesc.flags), numframes(animdesc.numframes), animindex(animdesc.animindex),
+ModelAnim_t::ModelAnim_t(const ModelAnim_t& animdesc) : baseptr(animdesc.baseptr), name(animdesc.name), fps(animdesc.fps), flags(animdesc.flags), numframes(animdesc.numframes), animindex(animdesc.animindex),
 	nummovements(animdesc.nummovements), movements(animdesc.movements), framemovement(nullptr), numikrules(animdesc.numikrules), ikrules(nullptr),
-	sectionframes(animdesc.sectionframes), sectionstallframes(animdesc.sectionstallframes), numsections(animdesc.numsections), sections(nullptr),
-	sectionDataExtra(animdesc.sectionDataExtra), animData(animdesc.animData), animDataAsset(animdesc.animDataAsset), parsedBufferIndex(animdesc.parsedBufferIndex)
+	sectionframes(animdesc.sectionframes), sectionstallframes(animdesc.sectionstallframes), numsections(animdesc.numsections), sections(nullptr), sectionDataExtra(animdesc.sectionDataExtra), animData(animdesc.animData), animDataAsset(animdesc.animDataAsset), parsedBufferIndex(animdesc.parsedBufferIndex)
 {
 	if (animdesc.sections)
 	{
@@ -80,11 +78,9 @@ ModelAnim_t::ModelAnim_t(const ModelAnim_t& animdesc) : baseptr(animdesc.baseptr
 	}
 }
 
-ModelAnim_t::ModelAnim_t(const r2::mstudioanimdesc_t* const animdesc) : baseptr(reinterpret_cast<const void* const>(animdesc)),
-	name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
+ModelAnim_t::ModelAnim_t(const r2::mstudioanimdesc_t* const animdesc) : baseptr(reinterpret_cast<const void* const>(animdesc)), name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
 	nummovements(animdesc->nummovements), movements(animdesc->pMovement(0)), framemovement(nullptr), numikrules(animdesc->numikrules), ikrules(nullptr),
-	sectionframes(animdesc->sectionframes), sectionstallframes(0), numsections(0), sections(nullptr), sectionDataExtra(nullptr),
-	animData(nullptr), animDataAsset(0ull), parsedBufferIndex(invalidNoodleIdx)
+	sectionframes(animdesc->sectionframes), sectionstallframes(0), numsections(0), sections(nullptr), sectionDataExtra(nullptr), animData(nullptr), animDataAsset(0ull), parsedBufferIndex(invalidNoodleIdx)
 {
 	flags |= eStudioAnimFlags::ANIM_VALID;
 
@@ -115,11 +111,9 @@ ModelAnim_t::ModelAnim_t(const r2::mstudioanimdesc_t* const animdesc) : baseptr(
 	}
 };
 
-ModelAnim_t::ModelAnim_t(const r5::mstudioanimdesc_v8_t* const animdesc) : baseptr(reinterpret_cast<const void* const>(animdesc)),
-	name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
+ModelAnim_t::ModelAnim_t(const r5::mstudioanimdesc_v8_t* const animdesc) : baseptr(reinterpret_cast<const void* const>(animdesc)), name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
 	nummovements(animdesc->nummovements), movements(animdesc->pMovement(0)), framemovement(nullptr), numikrules(animdesc->numikrules), ikrules(nullptr),
-	sectionframes(animdesc->sectionframes), sectionstallframes(0), numsections(0), sections(nullptr), sectionDataExtra(nullptr),
-	animData(nullptr), animDataAsset(0ull), parsedBufferIndex(invalidNoodleIdx)
+	sectionframes(animdesc->sectionframes), sectionstallframes(0), numsections(0), sections(nullptr), sectionDataExtra(nullptr), animData(nullptr), animDataAsset(0ull), parsedBufferIndex(invalidNoodleIdx)
 {
 	// [rika]: there's no point to parse these without this flag, and we can't determine what the count will be properly
 	// [rika]: it will also never get hit by a panim function, so no need to worry there
@@ -150,11 +144,9 @@ ModelAnim_t::ModelAnim_t(const r5::mstudioanimdesc_v8_t* const animdesc) : basep
 	}
 };
 
-ModelAnim_t::ModelAnim_t(const r5::mstudioanimdesc_v12_1_t* const animdesc, const char* const ext) : baseptr(reinterpret_cast<const void* const>(animdesc)),
-	name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
+ModelAnim_t::ModelAnim_t(const r5::mstudioanimdesc_v12_1_t* const animdesc, const char* const ext) : baseptr(reinterpret_cast<const void* const>(animdesc)), name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
 	nummovements(animdesc->nummovements), movements(animdesc->pMovement(0)), framemovement(nullptr), numikrules(animdesc->numikrules), ikrules(nullptr),
-	sectionframes(animdesc->sectionframes), sectionstallframes(animdesc->sectionstallframes), numsections(0), sections(nullptr),
-	sectionDataExtra(ext), animData(nullptr), animDataAsset(0ull), parsedBufferIndex(invalidNoodleIdx)
+	sectionframes(animdesc->sectionframes), sectionstallframes(animdesc->sectionstallframes), numsections(0), sections(nullptr), sectionDataExtra(ext), animData(nullptr), animDataAsset(0ull), parsedBufferIndex(invalidNoodleIdx)
 {
 	// [rika]: there's no point to parse these without this flag, and we can't determine what the count will be properly
 	// [rika]: it will also never get hit by a panim function, so no need to worry there
@@ -185,11 +177,9 @@ ModelAnim_t::ModelAnim_t(const r5::mstudioanimdesc_v12_1_t* const animdesc, cons
 	}
 };
 
-ModelAnim_t::ModelAnim_t(const r5::mstudioanimdesc_v16_t* const animdesc, const char* const ext) : baseptr(reinterpret_cast<const void* const>(animdesc)),
-	name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
+ModelAnim_t::ModelAnim_t(const r5::mstudioanimdesc_v16_t* const animdesc, const char* const ext) : baseptr(reinterpret_cast<const void* const>(animdesc)), name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(animdesc->animindex),
 	nummovements(0), movements(nullptr), framemovement(nullptr), numikrules(animdesc->numikrules), ikrules(nullptr),
-	sectionframes(animdesc->sectionframes), sectionstallframes(animdesc->sectionstallframes), numsections(0), sections(nullptr),
-	sectionDataExtra(ext), animData(nullptr), animDataAsset(0ull), parsedBufferIndex(invalidNoodleIdx)
+	sectionframes(animdesc->sectionframes), sectionstallframes(animdesc->sectionstallframes), numsections(0), sections(nullptr), sectionDataExtra(ext), animData(nullptr), animDataAsset(0ull), parsedBufferIndex(invalidNoodleIdx)
 {
 	// [rika]: there's no point to parse these without this flag, and we can't determine what the count will be properly
 	// [rika]: it will also never get hit by a panim function, so no need to worry there
@@ -220,11 +210,9 @@ ModelAnim_t::ModelAnim_t(const r5::mstudioanimdesc_v16_t* const animdesc, const 
 	}
 };
 
-ModelAnim_t::ModelAnim_t(const r5::mstudioanimdesc_v19_1_t* const animdesc, const char* const ext) : baseptr(reinterpret_cast<const void* const>(animdesc)),
-	name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(0),
+ModelAnim_t::ModelAnim_t(const r5::mstudioanimdesc_v19_1_t* const animdesc, const char* const ext) : baseptr(reinterpret_cast<const void* const>(animdesc)), name(animdesc->pszName()), fps(animdesc->fps), flags(animdesc->flags), numframes(animdesc->numframes), animindex(0),
 	nummovements(0), movements(nullptr), framemovement(nullptr), numikrules(animdesc->numikrules), ikrules(nullptr),
-	sectionframes(animdesc->sectionframes), sectionstallframes(animdesc->sectionstallframes), numsections(0), sections(nullptr),
-	sectionDataExtra(ext), animData(nullptr), animDataAsset(animdesc->animDataAsset), parsedBufferIndex(invalidNoodleIdx)
+	sectionframes(animdesc->sectionframes), sectionstallframes(animdesc->sectionstallframes), numsections(0), sections(nullptr), sectionDataExtra(ext), animData(nullptr), animDataAsset(animdesc->animDataAsset), parsedBufferIndex(invalidNoodleIdx)
 {
 	// [rika]: there's no point to parse these without this flag, and we can't determine what the count will be properly
 	// [rika]: it will also never get hit by a panim function, so no need to worry there
@@ -323,8 +311,7 @@ const char* const ModelAnim_t::pAnimdataStall_0(int* const piFrame, int* const _
 	return ((char*)baseptr + index);
 }
 
-// [rika]: revision that appeared when datapoint animations were added, does not read the trailing section of rle animations,
-//         and stores the section's frame length
+// [rika]: revision that appeared when datapoint animations were added, does not read the trailing section of rle animations, and stores the section's frame length
 const char* const ModelAnim_t::pAnimdataStall_1(int* const piFrame, int* const pSectionLength) const
 {
 	int index = animindex;
@@ -363,9 +350,7 @@ const char* const ModelAnim_t::pAnimdataStall_1(int* const piFrame, int* const p
 
 			// we will stall if this is not loaded, for whatever reason
 			index = pSection(0)->animindex;
-
-			// gets set to last frame of 'static'/'stall' section if the external data offset has not been cached(?)
-			*piFrame = sectionstallframes - 1;
+			*piFrame = sectionstallframes - 1; // gets set to last frame of 'static'/'stall' section if the external data offset has not been cached(?)
 		}
 	}
 
@@ -373,8 +358,7 @@ const char* const ModelAnim_t::pAnimdataStall_1(int* const piFrame, int* const p
 	return ((char*)baseptr + index);
 }
 
-// [rika]: built upon the previous revision, but animindex is missing along with the first section,
-//         they're always assumed to be in the animdata asset
+// [rika]: built upon the previous revision, but animindex is missing along with the first section, they're always assumed to be in the animdata asset
 const char* const ModelAnim_t::pAnimdataStall_2(int* const piFrame, int* const pSectionLength) const
 {
 	int index = 0;
@@ -501,7 +485,7 @@ ModelSeq_t::ModelSeq_t(const r2::mstudioseqdesc_t* const seqdesc) : baseptr(rein
 
 }
 
-// putting a note here, apex can have numblends set to 0 despite having anims
+// putting a note here, apex can have numblends set to 0, despite having anims
 #define ANIMDESC_SANITY_CHECK(anim) (anim->fps < 0.0f || anim->fps > 2048.f || anim->numframes < 0 || anim->numframes > 0x20000)
 ModelSeq_t::ModelSeq_t(const r5::mstudioseqdesc_v8_t* const seqdesc) : baseptr(reinterpret_cast<const void* const>(seqdesc)), szlabel(seqdesc->pszLabel()), szactivityname(seqdesc->pszActivityName()), flags(seqdesc->flags), actweight(seqdesc->actweight),
 	events(nullptr), numevents(seqdesc->numevents), blends(defaultSequenceBlends), numblends(seqdesc->groupsize[0] * seqdesc->groupsize[1]), fadeintime(seqdesc->fadeintime), fadeouttime(seqdesc->fadeouttime), localentrynode(seqdesc->localentrynode), localexitnode(seqdesc->localexitnode), nodeflags(seqdesc->nodeflags),
@@ -532,7 +516,7 @@ ModelSeq_t::ModelSeq_t(const r5::mstudioseqdesc_v8_t* const seqdesc) : baseptr(r
 			// fps can't be negative, fps practically shouldn't be more than 2048, 128k frames is an absurd amount, so this is a very good check, since the number (int) should never have those last bits filled.
 			if (ANIMDESC_SANITY_CHECK(pAnimdesc))
 			{
-				Log("ASEQ: %s had animation(s) (index %i), but no animdesc; skipping...\n", seqdesc->pszLabel(), i);
+				Log("Sequence %s had animation(s) (index %i), but no animation description, skipping...\n", seqdesc->pszLabel(), i);
 				numblends = 0;
 				break;
 			}
@@ -611,7 +595,7 @@ ModelSeq_t::ModelSeq_t(const r5::mstudioseqdesc_v8_t* const seqdesc, const char*
 			// fps can't be negative, fps practically shouldn't be more than 2048, 128k frames is an absurd amount, so this is a very good check, since the number (int) should never have those last bits filled.
 			if (ANIMDESC_SANITY_CHECK(pAnimdesc))
 			{
-				Log("ASEQ: %s had animation(s) (index %i), but no animdesc; skipping...\n", seqdesc->pszLabel(), i);
+				Log("Sequence %s had animation(s) (index %i), but no animation description, skipping...\n", seqdesc->pszLabel(), i);
 				numblends = 0;
 				break;
 			}
@@ -703,7 +687,7 @@ ModelSeq_t::ModelSeq_t(const r5::mstudioseqdesc_v16_t* const seqdesc, const char
 			// fps can't be negative, fps practically shouldn't be more than 2048, 128k frames is an absurd amount, so this is a very good check, since the number (int) should never have those last bits filled.
 			if (ANIMDESC_SANITY_CHECK(pAnimdesc))
 			{
-				Log("ASEQ: %s had animation(s) (index %i), but no animdesc; skipping...\n", seqdesc->pszLabel(), i);
+				Log("Sequence %s had animation(s) (index %i), but no animation description, skipping...\n", seqdesc->pszLabel(), i);
 				numblends = 0;
 				break;
 			}
@@ -786,7 +770,7 @@ ModelSeq_t::ModelSeq_t(const r5::mstudioseqdesc_v18_t* const seqdesc, const char
 				// fps can't be negative, fps practically shouldn't be more than 2048, 128k frames is an absurd amount, so this is a very good check, since the number (int) should never have those last bits filled.
 				if (ANIMDESC_SANITY_CHECK(pAnimdesc))
 				{
-					Log("ASEQ: %s had animation(s) (index %i), but no animdesc; skipping...\n", seqdesc->pszLabel(), i);
+					Log("Sequence %s had animation(s) (index %i), but no animation description, skipping...\n", seqdesc->pszLabel(), i);
 					numblends = 0;
 					break;
 				}
@@ -806,7 +790,7 @@ ModelSeq_t::ModelSeq_t(const r5::mstudioseqdesc_v18_t* const seqdesc, const char
 				// fps can't be negative, fps practically shouldn't be more than 2048, 128k frames is an absurd amount, so this is a very good check, since the number (int) should never have those last bits filled.
 				if (ANIMDESC_SANITY_CHECK(pAnimdesc))
 				{
-					Log("ASEQ: %s had animation(s) (index %i), but no animdesc; skipping...\n", seqdesc->pszLabel(), i);
+					Log("Sequence %s had animation(s) (index %i), but no animation description, skipping...\n", seqdesc->pszLabel(), i);
 					numblends = 0;
 					break;
 				}
@@ -927,9 +911,10 @@ void ParseAnimation(ModelSeq_t* const seqdesc, ModelAnim_t* const animdesc, cons
 {
 	const int boneCount = static_cast<int>(bones->size());
 
-	Vector positions[256]{};
-	Quaternion quats[256]{};
-	Vector scales[256]{};
+	// Same 256-bone stack-array overrun as the other overload; size by bone count.
+	std::vector<Vector> positions(boneCount);
+	std::vector<Quaternion> quats(boneCount);
+	std::vector<Vector> scales(boneCount);
 
 	if (animdesc->flags & eStudioAnimFlags::ANIM_DELTA)
 	{
@@ -1034,13 +1019,15 @@ void ParseSequence(ModelSeq_t* const seqdesc, const std::vector<ModelBone_t>* co
 	}
 }
 
-void ParseAnimation(ModelSeq_t* const seqdesc, ModelAnim_t* const animdesc, const std::vector<ModelBone_t>* const bones, const AnimdataFuncType_t funcType, const uint32_t flagWidth)
+void ParseAnimation(ModelSeq_t* const seqdesc, ModelAnim_t* const animdesc, const std::vector<ModelBone_t>* const bones, const AnimdataFuncType_t funcType)
 {
 	const int boneCount = static_cast<int>(bones->size());
 
-	if (bones->size() > 1024)
-		Log("ParseAnimation: Animation %s exceeded 1024 bones.\n", animdesc->pszName());
-
+	// One entry per bone, heap allocated. These were fixed 256-entry STACK arrays
+	// written through `positions[i]` for i < boneCount, so a model with more than
+	// 256 bones overran the stack and tripped /GS: __report_gsfailure -> fastfail
+	// 0xC0000409, which no SEH handler can catch, so RSX died silently with no
+	// crash log and no output at all.
 	std::vector<Vector> positions(boneCount);
 	std::vector<Quaternion> quats(boneCount);
 	std::vector<Vector> scales(boneCount);
@@ -1103,7 +1090,7 @@ void ParseAnimation(ModelSeq_t* const seqdesc, ModelAnim_t* const animdesc, cons
 
 			int sectionlength = 0;
 			const uint8_t* const boneFlagArray = reinterpret_cast<const uint8_t* const>((animdesc->*s_AnimdataFuncs_DP[funcType])(&iLocalFrame, &sectionlength));
-			const r5::mstudio_rle_anim_t* panim = reinterpret_cast<const r5::mstudio_rle_anim_t*>(&boneFlagArray[ANIM_BONEFLAG_SIZE(boneCount, flagWidth)]);
+			const r5::mstudio_rle_anim_t* panim = reinterpret_cast<const r5::mstudio_rle_anim_t*>(&boneFlagArray[ANIM_BONEFLAG_SIZE(boneCount)]);
 
 			for (int bone = 0; bone < boneCount; bone++)
 			{
@@ -1111,7 +1098,7 @@ void ParseAnimation(ModelSeq_t* const seqdesc, ModelAnim_t* const animdesc, cons
 				Quaternion q(quats[bone]);
 				Vector scale(scales[bone]);
 
-				uint8_t boneFlags = ANIM_BONEFLAGS_FLAG(boneFlagArray, bone, flagWidth); // truncate byte offset then shift if needed
+				uint8_t boneFlags = ANIM_BONEFLAGS_FLAG(boneFlagArray, bone); // truncate byte offset then shift if needed
 				const uint8_t* panimtrack = reinterpret_cast<const uint8_t*>(panim + 1);
 				const float fLocalFrame = static_cast<float>(iLocalFrame) + s;
 
@@ -1185,7 +1172,7 @@ void ParseAnimation(ModelSeq_t* const seqdesc, ModelAnim_t* const animdesc, cons
 
 			int sectionlength = 0;
 			const uint8_t* const boneFlagArray = reinterpret_cast<const uint8_t* const>((animdesc->*s_AnimdataFuncs_RLE[funcType])(&iLocalFrame, &sectionlength));
-			const r5::mstudio_rle_anim_t* panim = reinterpret_cast<const r5::mstudio_rle_anim_t*>(&boneFlagArray[ANIM_BONEFLAG_SIZE(boneCount, flagWidth)]);
+			const r5::mstudio_rle_anim_t* panim = reinterpret_cast<const r5::mstudio_rle_anim_t*>(&boneFlagArray[ANIM_BONEFLAG_SIZE(boneCount)]);
 			UNUSED(sectionlength);
 
 			for (int bone = 0; bone < boneCount; bone++)
@@ -1195,9 +1182,7 @@ void ParseAnimation(ModelSeq_t* const seqdesc, ModelAnim_t* const animdesc, cons
 				Vector scale(scales[bone]);
 				RadianEuler baseRot(rotations[bone]);
 
-				uint8_t boneFlags = ANIM_BONEFLAGS_FLAG(boneFlagArray, bone, flagWidth); // truncate byte offset then shift if needed
-
-				assertm((boneFlags & (r5::RleBoneFlags_t::STUDIO_ANIM_UNK10 | r5::RleBoneFlags_t::STUDIO_ANIM_UNK20)) == 0, "had new flags");
+				uint8_t boneFlags = ANIM_BONEFLAGS_FLAG(boneFlagArray, bone); // truncate byte offset then shift if needed
 
 				if (boneFlags & (r5::RleBoneFlags_t::STUDIO_ANIM_DATA)) // check if this bone has data
 				{
@@ -1246,7 +1231,7 @@ void ParseAnimation(ModelSeq_t* const seqdesc, ModelAnim_t* const animdesc, cons
 	g_BufferManager.RelieveBuffer(buffer);
 }
 
-void ParseSequence(ModelSeq_t* const seqdesc, const std::vector<ModelBone_t>* const bones, const AnimdataFuncType_t funcType, const uint32_t flagWidth)
+void ParseSequence(ModelSeq_t* const seqdesc, const std::vector<ModelBone_t>* const bones, const AnimdataFuncType_t funcType)
 {
 	// check flags
 	assertm(static_cast<uint8_t>(CAnimDataBone::ANIMDATA_POS) == static_cast<uint8_t>(r5::RleBoneFlags_t::STUDIO_ANIM_POS), "flag mismatch");
@@ -1264,7 +1249,7 @@ void ParseSequence(ModelSeq_t* const seqdesc, const std::vector<ModelBone_t>* co
 			continue;
 		}
 
-		ParseAnimation(seqdesc, animdesc, bones, funcType, flagWidth);
+		ParseAnimation(seqdesc, animdesc, bones, funcType);
 	}
 }
 
@@ -1349,8 +1334,8 @@ void ParseModelSequenceData_Stall_V18(ModelParsedData_t* const parsedData, char*
 	}
 }
 
-extern void ParseAnimSeqDataForSeq(ModelSeq_t* const seqdesc, const size_t boneCount, const uint32_t flagWidth);
-void ParseModelSequenceData_Stall_V19_1(ModelParsedData_t* const parsedData, char* const baseptr, const uint32_t flagWidth)
+extern void ParseAnimSeqDataForSeq(ModelSeq_t* const seqdesc, const size_t boneCount);
+void ParseModelSequenceData_Stall_V19_1(ModelParsedData_t* const parsedData, char* const baseptr)
 {
 	assertm(parsedData->bones.size() > 0, "should have bones");
 
@@ -1366,9 +1351,9 @@ void ParseModelSequenceData_Stall_V19_1(ModelParsedData_t* const parsedData, cha
 	{
 		parsedData->localSequences[i] = ModelSeq_t(reinterpret_cast<r5::mstudioseqdesc_v18_t* const>(baseptr + pStudioHdr->localSequenceOffset) + i, nullptr, 1u);
 
-		ParseAnimSeqDataForSeq(parsedData->localSequences + i, parsedData->bones.size(), flagWidth);
+		ParseAnimSeqDataForSeq(parsedData->localSequences + i, parsedData->bones.size());
 
-		ParseSequence(&parsedData->localSequences[i], &parsedData->bones, AnimdataFuncType_t::ANIM_FUNC_STALL_ANIMDATA, flagWidth);
+		ParseSequence(&parsedData->localSequences[i], &parsedData->bones, AnimdataFuncType_t::ANIM_FUNC_STALL_ANIMDATA);
 	}
 }
 

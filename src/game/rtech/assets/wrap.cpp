@@ -4,7 +4,6 @@
 #include <game/rtech/utils/utils.h>
 #include <game/bsp/bsp.h>
 #include <thirdparty/imgui/imgui.h>
-#include <thirdparty/imgui/misc/imgui_memory_editor.h>
 
 void LoadWrapAsset(CAssetContainer* const pak, CAsset* const asset)
 {
@@ -108,38 +107,6 @@ std::unique_ptr<char[]> GetWrapAssetData(CAsset* const asset, uint64_t* outSize)
     return wrapData;
 }
 
-// eugh
-std::string Wrap_GetPathWithSwappedExtensions(const WrapAsset* const wrapAsset, const std::string& origAssetName)
-{
-    // size of the asset path excluding the first folder and the VM extension (ui, client, server)
-    const uint64_t realPathSize = static_cast<uint64_t>(wrapAsset->pathSize) - wrapAsset->skipFirstFolderPos;
-
-    if (origAssetName.length() == realPathSize)
-        return origAssetName;
-
-    const std::string vmExtension = origAssetName.substr(realPathSize);
-
-    const std::string assetPathWithoutVMExt = origAssetName.substr(0, realPathSize);
-
-    std::filesystem::path fsPath(assetPathWithoutVMExt);
-
-    const std::string realExtension = fsPath.extension().string();
-
-    fsPath.replace_extension(vmExtension);
-    fsPath += realExtension;
-
-    return fsPath.string();
-}
-
-// if there is a VM extension at the end of the file name, cut it off
-// 
-// usually, wrapAsset->pathSize will equal everything up until ".ui" or ".client"
-// but the asset name already has the first folder cut off by this point, so we have to account for that in this check
-inline void Wrap_StripVMExtensionFromPath(WrapAsset* const wrapAsset, std::string& assetPath)
-{
-    if (assetPath.length() != (wrapAsset->pathSize - wrapAsset->skipFirstFolderPos))
-        assetPath = assetPath.substr(0, wrapAsset->pathSize - wrapAsset->skipFirstFolderPos);
-}
 
 void PostLoadWrapAsset(CAssetContainer* const pak, CAsset* const asset)
 {
@@ -148,35 +115,24 @@ void PostLoadWrapAsset(CAssetContainer* const pak, CAsset* const asset)
 
     WrapAsset* const wrapAsset = reinterpret_cast<WrapAsset*>(pakAsset->extraData());
 
-    // Default wrap asset type is "unknown"; basically if the file's extension isn't registered against a file type, it's previewed as binary data
-    wrapAsset->type = VPKFileType_e::UNKNOWN;
+    wrapAsset->parsedDataType = eWrapAssetParsedDataType::NONE;
 
-    std::string assetName = asset->GetAssetName();
-    
-    Wrap_StripVMExtensionFromPath(wrapAsset, assetName);
+#if defined(HAS_BSP_SUPPORT)
+    std::filesystem::path assetPath = std::filesystem::path(asset->GetAssetName());
+    std::string extension = assetPath.extension().string();
 
-    std::filesystem::path assetPath = std::filesystem::path(assetName);
-    const std::string extension = assetPath.extension().string();
-
-    // wrapped filesystem is the successor of vpk so we use VPK types, not the other way around
-    if (auto it = s_vpkFileTypes.find(extension); it != s_vpkFileTypes.end())
-        wrapAsset->type = it->second;
-
-    switch (wrapAsset->type)
+    if (extension == ".bsp")
     {
-    case VPKFileType_e::BSP:
-    {
-#if (HAS_BSP_SUPPORT)
+        wrapAsset->parsedDataType = eWrapAssetParsedDataType::BSP;
+
         std::unique_ptr<char[]> wrapData = GetWrapAssetData(asset, nullptr);
 
         CBSPData* bspData = new CBSPData(assetPath.stem().string());
         bspData->PopulateFromPakAsset(pakAsset, wrapData.get());
 
         wrapAsset->parsedData = bspData;
+    }
 #endif
-        break;
-    }
-    }
 }
 
 bool ExportWrapAsset(CAsset* const asset, const int setting)
@@ -187,17 +143,13 @@ bool ExportWrapAsset(CAsset* const asset, const int setting)
     const WrapAsset* const wrapAsset = reinterpret_cast<WrapAsset*>(pakAsset->extraData());
 
     // Create exported path + asset path.
-    std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory() / fourCCToString(asset->GetAssetType());
+    std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory() / fourCCToString(asset->GetAssetType());
     if (!CreateDirectories(exportPath))
     {
         assertm(false, "Failed to create asset type directory.");
         return false;
     }
-
-    if (g_rsxSettings.useOrigScriptExportExtensions)
-        exportPath.append(asset->GetAssetName());
-    else
-        exportPath.append(Wrap_GetPathWithSwappedExtensions(wrapAsset, asset->GetAssetName()));
+    exportPath.append(asset->GetAssetName());
 
     if (!CreateDirectories(exportPath.parent_path()))
     {
@@ -205,10 +157,10 @@ bool ExportWrapAsset(CAsset* const asset, const int setting)
         return false;
     }
 
-    switch (wrapAsset->type)
+    switch (wrapAsset->parsedDataType)
     {
-    case VPKFileType_e::UNKNOWN:
-    case VPKFileType_e::TEXT:
+    case eWrapAssetParsedDataType::NONE:
+    default:
     {
         StreamIO wrapOut;
 
@@ -221,20 +173,15 @@ bool ExportWrapAsset(CAsset* const asset, const int setting)
         uint64_t wrapOutSize = 0;
         std::unique_ptr<char[]> wrapData = GetWrapAssetData(asset, &wrapOutSize);
 
-        if (!wrapData || wrapOutSize == 0)
+        if (!wrapData)
             return false;
-
-        // If the file has been detected as a text file and the last byte of the data is a null terminator, adjust the file size so we don't write it
-        // In theory, the last byte will ALWAYS be a null byte, but it doesn't hurt to double check
-        if (wrapAsset->type == VPKFileType_e::TEXT && wrapData[wrapOutSize - 1] == '\0')
-            wrapOutSize--;
 
         wrapOut.write(wrapData.get(), wrapOutSize);
         wrapOut.close();
         break;
     }
-#if (HAS_BSP_SUPPORT)
-    case WrapAssetType_e::BSP:
+#if defined(HAS_BSP_SUPPORT)
+    case eWrapAssetParsedDataType::BSP:
     {
         StreamIO wrapOut;
 
@@ -253,84 +200,34 @@ bool ExportWrapAsset(CAsset* const asset, const int setting)
         break;
     }
 #endif
-    default:
-    {
-        unreachable();
-        break;
-    }
     }
 
     return true;
 }
 
-void* Wrap_PreviewTextOrBinary(CAsset* const asset, WrapAsset* const wrapAsset, const bool firstFrameForAsset)
-{
-    // this leaks memory
-    if (firstFrameForAsset && !wrapAsset->rawData)
-    {
-        uint64_t wrapOutSize = 0;
-        std::unique_ptr<char[]> wrapData = GetWrapAssetData(asset, &wrapOutSize);
-
-        if (!wrapData || wrapOutSize == 0)
-        {
-            assert(0);
-            return nullptr;
-        }
-
-        wrapAsset->rawData = std::move(wrapData);
-    }
-
-    if (ImGui::BeginChild("##Wrap Preview", ImVec2(-1, -1), true, ImGuiWindowFlags_HorizontalScrollbar))
-    {
-        if(wrapAsset->type == VPKFileType_e::TEXT)
-            ImGui::TextUnformatted(reinterpret_cast<const char*>(wrapAsset->rawData.get()));
-        else
-        {
-            static MemoryEditor wrapPreview;
-
-            wrapPreview.ReadOnly = true;
-            wrapPreview.OptShowDataPreview = true;
-            //wrapPreview.UserData = &previewData;
-            //wrapPreview.BgColorFn = UIArgData_BGColorCallback;
-
-            wrapPreview.DrawContents(wrapAsset->rawData.get(), wrapAsset->dcmpSize);
-        }
-    }
-    ImGui::EndChild();
-
-    // there's nothing to put in the main scene window
-    return nullptr;
-}
-
 void* PreviewWrapAsset(CAsset* const asset, const bool firstFrameForAsset)
 {
+    UNUSED(firstFrameForAsset);
     CPakAsset* const pakAsset = static_cast<CPakAsset*>(asset);
+    assertm(pakAsset, "Asset should be valid.");
 
     WrapAsset* const wrapAsset = reinterpret_cast<WrapAsset*>(pakAsset->extraData());
 
-    if (!wrapAsset) UNLIKELY
+#if defined(HAS_BSP_SUPPORT)
+    ImGui::Text("WRAP asset preview is currently only available for .bsp files");
+#else
+    ImGui::Text("WRAP asset preview is unsupported on this build");
+#endif
+
+    if (!wrapAsset || wrapAsset->parsedDataType == eWrapAssetParsedDataType::NONE)
         return nullptr;
 
-    switch (wrapAsset->type)
-    {
-#if !(HAS_BSP_SUPPORT) // if no bsp-specific support, just show it as a binary file
-    case VPKFileType_e::BSP:
-#endif
-    case VPKFileType_e::TEXT:
-    case VPKFileType_e::UNKNOWN:
-        return Wrap_PreviewTextOrBinary(asset, wrapAsset, firstFrameForAsset);
-#if (HAS_BSP_SUPPORT)
-    case WrapAssetType_e::BSP:
+    // No need to include a preprocessor flag here. This data type isn't set unless the flag is defined
+    if (wrapAsset->parsedDataType == eWrapAssetParsedDataType::BSP)
         return reinterpret_cast<CBSPData*>(wrapAsset->parsedData)->ConstructPreviewData();
-#endif
-    default:
-    {
-        ImGui::Text("Preview for WRAP assets is currently not supported for BSP files");
-        return nullptr;
-    }
-    }
 
-    unreachable();
+    return nullptr;
+
 }
 
 void InitWrapAssetType()

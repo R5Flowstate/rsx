@@ -13,19 +13,12 @@ CShader* CDXShaderManager::GetShaderByPath(const std::string& path)
 	return nullptr;
 }
 
-CShader* CDXShaderManager::LoadShaderFromString(const std::string& path, const std::string& sourceString, eShaderType type, D3D11_INPUT_ELEMENT_DESC* inputLayoutDesc, UINT numInputElements)
+CShader* CDXShaderManager::LoadShaderFromString(const std::string& path, const std::string& sourceString, eShaderType type, bool useDefaultInputLayout)
 {
 	if (CShader* shader = GetShaderByPath(path))
 		return shader;
 
 	Log("* loading %s shader %s from string\n", GetShaderTypeName(type), path.c_str());
-
-#if defined(DEBUG_LOAD_SHADERS_DISK)
-	CShader* shd = this->LoadShader(path, type, inputLayoutDesc, numInputElements);
-
-	if (shd)
-		return shd;
-#endif
 
 	const std::string shortName = GetShaderTypeShortName(type);
 	const std::string entrypoint = shortName + "_main";
@@ -109,30 +102,28 @@ CShader* CDXShaderManager::LoadShaderFromString(const std::string& path, const s
 
 	shader->m_bytecodeBlob = shaderBlob;
 
-	if (type == eShaderType::Vertex && !shader->m_inputLayout)
+	// do better
+	if (useDefaultInputLayout && type == eShaderType::Vertex && !shader->m_inputLayout)
 	{
-		if (!inputLayoutDesc)
-		{
-			inputLayoutDesc = s_DefaultInputLayoutDesc;
-			numInputElements = std::size(s_DefaultInputLayoutDesc);
-		}
+		D3D11_INPUT_ELEMENT_DESC desc[] = {
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+			{ "NORMAL", 0, DXGI_FORMAT_R32_UINT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0},
+			{ "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UINT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0},
+			{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0},
+		};
 
-		hr = g_dxHandler->GetDevice()->CreateInputLayout(
-			inputLayoutDesc, numInputElements,
-			shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(),
-			&shader->m_inputLayout
-		);
-
-		if (FAILED(hr))
+		const HRESULT h = g_dxHandler->GetDevice()->CreateInputLayout(desc, ARRSIZE(desc), shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), &shader->m_inputLayout);
+		if (FAILED(h))
 			return nullptr;
 	}
-	else shader->m_inputLayout = nullptr;
+	else
+		shader->m_inputLayout = nullptr;
 
 	m_shaders.emplace(path, shader);
 	return shader;
 }
 
-CShader* CDXShaderManager::LoadShader(const std::string& path, eShaderType type, D3D11_INPUT_ELEMENT_DESC* inputLayoutDesc, UINT numInputElements)
+CShader* CDXShaderManager::LoadShader(const std::string& path, eShaderType type, bool useDefaultInputLayout)
 {
 	if (CShader* shader = GetShaderByPath(path))
 		return shader;
@@ -229,24 +220,21 @@ CShader* CDXShaderManager::LoadShader(const std::string& path, eShaderType type,
 
 	shader->m_bytecodeBlob = shaderBlob;
 
-	if (type == eShaderType::Vertex && !shader->m_inputLayout)
+	if (useDefaultInputLayout && type == eShaderType::Vertex && !shader->m_inputLayout)
 	{
-		if (!inputLayoutDesc)
-		{
-			inputLayoutDesc = s_DefaultInputLayoutDesc;
-			numInputElements = std::size(s_DefaultInputLayoutDesc);
-		}
+		D3D11_INPUT_ELEMENT_DESC desc[] = {
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+			{ "NORMAL", 0, DXGI_FORMAT_R32_UINT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0},
+			{ "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UINT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0},
+			{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0},
+		};
 
-		hr = g_dxHandler->GetDevice()->CreateInputLayout(
-			inputLayoutDesc, numInputElements,
-			shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(),
-			&shader->m_inputLayout
-		);
-
-		if (FAILED(hr))
+		const HRESULT h = g_dxHandler->GetDevice()->CreateInputLayout(desc, ARRSIZE(desc), shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), &shader->m_inputLayout);
+		if (FAILED(h))
 			return nullptr;
 	}
-	else shader->m_inputLayout = nullptr;
+	else
+		shader->m_inputLayout = nullptr;
 
 	m_shaders.emplace(path, shader);
 	return shader;

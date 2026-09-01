@@ -1,12 +1,8 @@
 #pragma once
 
-#include <shared_mutex>
-
-constexpr const char RSX_CACHE_DB_FILENAME[] = "rsx_cache_db.bin";
-
 // v1: intial revision
 // v2: adds crc to header
-constexpr uint32_t CACHE_DB_FILE_VERSION = 2;
+constexpr int CACHE_DB_FILE_VERSION = 2;
 constexpr size_t maxCacheFileSize = 1024 * 1024 * 32;
 
 #pragma pack(push, 1)
@@ -14,7 +10,7 @@ struct CacheDBHeader_t
 {
 	uint32_t fileVersion; // doesnt need to be 32-bit but it'll get padded to it anyway
 	uint32_t fileCRC;
-	uint32_t numMappings;
+	uint32_t numMappings; // mappings immediately follow the header
 
 	uint32_t reserved_0;
 
@@ -68,15 +64,16 @@ public:
 	bool SaveToFile(const std::string& path);
 	bool LoadFromFile(const std::string& path);
 
-	std::optional<CCacheEntry> TryGetEntry(const uint64_t guid) const
+	bool LookupGuid(const uint64_t guid, CCacheEntry* const outEntry = nullptr) const
 	{
-		std::shared_lock lock(m_cacheMutex);
+		const bool foundGuid = m_cacheEntries.contains(guid);
 
-		auto iter = m_cacheEntries.find(guid);
-		if (iter == m_cacheEntries.end())
-			return std::nullopt;
+		// must copy! if an asset calls CCacheDBManager::Add from another thread
+		// while LookupGuid is being called, we end up with UB from a bad pointer
+		if (foundGuid && outEntry)
+			*outEntry = m_cacheEntries.at(guid);
 
-		return iter->second;
+		return foundGuid;
 	}
 
 	void Add(const std::string& str);
@@ -91,14 +88,14 @@ public:
 private:
 	void AddInternal(const CCacheEntry& entry);
 
-	uint32_t LoadCRCFromFile(const std::string& path) const;
-	uint32_t ParseCRCFromFile(const std::string& path) const;
-	std::shared_ptr<char> UpgradeLegacyFile_V1(const std::string& path, std::shared_ptr<char> fileBuf, const size_t fileBufSize) const;
+	const uint32_t LoadCRCFromFile(const std::string& path) const;
+	const uint32_t ParseCRCFromFile(const std::string& path) const;
+	char* UpgradeLegacyFile_V1(const std::string& path, const char* const fileBuf, const size_t fileBufSize) const;
 
 private:
 	std::unordered_map<uint64_t, CCacheEntry> m_cacheEntries;
 
-	mutable std::shared_mutex m_cacheMutex;
+	std::mutex m_cacheMutex;
 
 	uint32_t m_sourceCRC;
 };

@@ -5,7 +5,7 @@
 #include <game/rtech/utils/utils.h>
 #include <thirdparty/imgui/imgui.h>
 
-extern RSXSettings_t g_rsxSettings;
+extern ExportSettings_t g_ExportSettings;
 
 static const char* const s_PathPrefixRTK = s_AssetTypePaths.find(AssetType_t::RTK)->second;
 
@@ -92,11 +92,11 @@ bool ExportRTKAsset(CAsset* const asset, const int setting)
     const RTKAsset* const hdr = reinterpret_cast<RTKAsset*>(pakAsset->extraData());
 
     // Create exported path + asset path.
-    std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+    std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
     const std::filesystem::path rtkPath(pakAsset->GetAssetName());
 
     // truncate paths?
-    if (g_rsxSettings.exportPathsFull)
+    if (g_ExportSettings.exportPathsFull)
         exportPath.append(rtkPath.parent_path().string());
     else
         exportPath.append(s_PathPrefixRTK);

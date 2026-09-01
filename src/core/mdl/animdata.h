@@ -231,8 +231,6 @@ struct ModelAnim_t
 	inline const char* const pszName() const { return IsSeqDeclared() ? name + 1 : name; }
 
 	float fps;
-	inline const float Duration() const { return numframes / fps; };
-
 	int flags;
 
 	inline const bool IsOverriden() const { return flags & STUDIO_OVERRIDE; } // gets overwrote by external animation on load
@@ -538,14 +536,14 @@ struct ModelSeq_t
 };
 
 void ParseSequence(ModelSeq_t* const seqdesc, const std::vector<ModelBone_t>* const bones, const r2::studiohdr_t* const pStudioHdr);
-void ParseSequence(ModelSeq_t* const seqdesc, const std::vector<ModelBone_t>* const bones, const AnimdataFuncType_t funcType, const uint32_t flagWidth = ANIM_BONEFLAG_BITS_4);
+void ParseSequence(ModelSeq_t* const seqdesc, const std::vector<ModelBone_t>* const bones, const AnimdataFuncType_t funcType);
 
 // [rika]: this is for model internal sequence data (r5)
 void ParseModelSequenceData_NoStall(ModelParsedData_t* const parsedData, char* const baseptr);
 void ParseModelSequenceData_Stall_V8(ModelParsedData_t* const parsedData, char* const baseptr);
 void ParseModelSequenceData_Stall_V16(ModelParsedData_t* const parsedData, char* const baseptr);
 void ParseModelSequenceData_Stall_V18(ModelParsedData_t* const parsedData, char* const baseptr);
-void ParseModelSequenceData_Stall_V19_1(ModelParsedData_t* const parsedData, char* const baseptr, const uint32_t flagWidth);
+void ParseModelSequenceData_Stall_V19_1(ModelParsedData_t* const parsedData, char* const baseptr);
 
 namespace r1
 {

@@ -1,35 +1,9 @@
 #pragma once
 
 #include <core/utils/cli_parser.h>
+#include <filesystem>
 
-enum UISettingType_e
-{
-    TYPE_BOOL,
-    TYPE_U32,
-    TYPE_FLOAT32
-};
-
-union UISettingValue_u
-{
-    bool boolVal;
-    uint32_t u32Val;
-    float flVal;
-};
-
-struct UISetting_t
-{
-    const char* cfgName;
-    const char* displayName;
-
-    UISettingValue_u rawValue;
-    UISettingType_e valueType;
-
-    UISetting_t(const char* cfgName, const char* displayName, bool bVal) : cfgName(cfgName), displayName(displayName), rawValue(bVal), valueType(UISettingType_e::TYPE_BOOL) {};
-    UISetting_t(const char* cfgName, const char* displayName, uint32_t u32Val) : cfgName(cfgName), displayName(displayName), rawValue(u32Val), valueType(UISettingType_e::TYPE_U32) {};
-    UISetting_t(const char* cfgName, const char* displayName, float flVal) : cfgName(cfgName), displayName(displayName), rawValue(flVal), valueType(UISettingType_e::TYPE_FLOAT32) {};
-};
-
-struct RSXSettings_t
+struct ExportSettings_t
 {
     // texture
     uint32_t exportNormalRecalcSetting;
@@ -40,6 +14,7 @@ struct RSXSettings_t
     // misc
     bool exportPathsFull;
     bool exportAssetDeps;
+    bool exportAssetDependents;
     bool disableCachedNames;
 
     // model settings
@@ -53,25 +28,17 @@ struct RSXSettings_t
     bool exportModelSkin;           // export the selected skin for a model
     bool exportModelMatsTruncated;  // truncate material names in model files
     bool exportQCIFiles;            // qc will split into multiple include files
-    bool useOrigScriptExportExtensions; // export wrap asset script files as .nut.ui instead of .ui.nut (for example)
+
+    // keep SM5.1 shader bytecode instead of substituting an SM5.0 sibling;
+    // the substitution is only needed when the target device is DX11
+    bool shaderKeepSM51;
 
     // model physics settings
     uint32_t exportPhysicsContentsFilter;
     bool exportPhysicsFilterExclusive;
     bool exportPhysicsFilterAND;
 
-    uint16_t bridgePort; // https://en.wikipedia.org/wiki/Bridgeport,_Connecticut
-
     std::filesystem::path exportDirectory;
-
-    std::unordered_map<uint32_t, std::vector<UISetting_t>> assetSettings;
-
-    void SetDefaultValues(const CCommandLine* cli)
-    {
-        SetExportDirectory(std::filesystem::current_path() / EXPORT_DIRECTORY_NAME);
-
-        SetFromCLI(cli);
-    }
 
     void SetFromCLI(const CCommandLine* cli);
 
@@ -83,12 +50,6 @@ struct RSXSettings_t
     const std::filesystem::path& GetExportDirectory() const
     {
         return this->exportDirectory;
-    }
-
-    const UISetting_t& GetAssetSetting(uint32_t type, size_t idx) const
-    {
-        assert(assetSettings.contains(type) && assetSettings.size() > idx);
-        return assetSettings.at(type).at(idx);
     }
 };
 
@@ -158,9 +119,6 @@ static const char* s_CompressionLevelSetting[eCompressionLevel::CMPR_LVL_COUNT] 
 
 struct PreviewSettings_t
 {
-    float previewCullDistance;
+    float previewCullDistance; // currently can only be set on load, which is not ideal
     float previewMovementSpeed;
 };
-
-extern RSXSettings_t g_rsxSettings;
-

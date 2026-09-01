@@ -35,7 +35,7 @@ static constexpr int s_MaxStudioTriIndices	= s_MaxStudioTriangles * 3; // max nu
 #define MAXSTUDIONAME			128
 #define MAXSTUDIOWEIGHTLIST		128
 
-#define UNPACKWEIGHT(w) static_cast<float>((w+1)/32768.f) // weights in vvw and vg are packed into a signed 16 bit value that uses the entire number range
+#define UNPACKWEIGHT(w) static_cast<float>(w / 32767.f) // weights in vvw and vg are packed into a signed 16 bit value that uses the entire number range
 
 //===================
 // STUDIO VERTEX DATA
@@ -332,38 +332,13 @@ namespace vg
 		uint16_t weight[2];	// packed weight with a max value of 32767, divide value by 32767 to get weight. weights will always correspond to first and second bone
 		// if the mesh has extra bone weights the second value will be used as an index into the array of extra bone weights, max value of 65535.
 		inline float Weight(const int i) const { return UNPACKWEIGHT(weight[i]); }
-		inline const uint16_t ExtraWeightsStartIndex() const { return weight[1]; }
+		inline const uint16_t Index() const { return weight[1]; }
 	};
 
-	struct BlendWeightIndicesPacked_256_s
-	{
-		uint32_t firstBone : 8;
-		uint32_t lastBone : 8;
-		uint32_t unk : 8;
-		uint32_t boneCount : 8;
-	};
-
-	struct BlendWeightIndicesPacked_1024_s
-	{
-		// (1 << 10) bones! (1024)
-		uint32_t firstBone : 10;
-		uint32_t lastBone : 10;
-		uint32_t unk : 4;
-		uint32_t boneCount : 8;
-	};
-
-	// Templated to the number of bits for each complex bone index
 	struct BlendWeightIndices_s
 	{
 		uint8_t bone[3];	// when the model doesn't have extra bone weights all three are used for bone indices, otherwise in order they will be used for: first bone, last bone (assumes vvd->vg), unused.
 		uint8_t boneCount;	// number of bones this vertex is weighted to excluding the base weight (value of 0 if only one weight, max of 15 with 16 weights)
-		
-		uint8_t operator[](int i)
-		{
-			assert(i >= 0 && i <= 2);
-
-			return reinterpret_cast<uint8_t*>(this)[i];
-		}
 	};
 
 	struct Vertex_t
@@ -983,7 +958,7 @@ struct mstudiomodelgroup_t
 #define STUDIO_AL_LOCAL		0x1000		// layer is a local context sequence
 #define STUDIO_AL_2000		0x2000		// skips parsing in AddSequenceLayer and AddLocalLayer if set
 #define STUDIO_AL_POSE		0x4000		// layer blends using a pose parameter instead of parent cycle
-#define STUDIO_AL_REALTIME	0x8000		// treats the layer sequence as if it uses STUDIO_REALTIME (sub_1401D9AD0 in R5pc_r5launch_N1094_CL456479_2019_10_30_05_20_PM)
+#define STUDIO_AL_REALTIME	0x8000		// treats the layer sequence as if it uses STUDIO_REALTIME
 
 
 //

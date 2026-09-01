@@ -149,7 +149,7 @@ static bool TextureList_ExportAsset(CAsset* const asset, const int setting)
 	UNUSED(asset);
 	UNUSED(setting);
 
-	std::filesystem::path exportPath = g_rsxSettings.GetExportDirectory();
+	std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
 	std::filesystem::path stgsPath = asset->GetAssetName();
 
 	exportPath.append(stgsPath.parent_path().string());
