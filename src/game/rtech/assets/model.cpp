@@ -712,9 +712,25 @@ static void ParseModelVertexData_v16(CPakAsset* const asset, ModelAsset* const m
         return;
     }
 
+    // Extent of the buffer above: starpak reads are exact-size, static data
+    // uses the baked size from the asset header.
+    const uint64_t vertexBufSize = pStreamed.get() ? modelAsset->vertexStreamingData.size : modelAsset->streamingDataSize;
+
     ModelParsedData_t* const parsedData = modelAsset->GetParsedData();
 
     const r5::studiohdr_v16_t* const pStudioHdr = reinterpret_cast<r5::studiohdr_v16_t*>(modelAsset->data);
+
+    // S30 (r5-300) mdl_ v19 revises the studiohdr past the bone/material block:
+    // the lod-group/lod fields no longer match studiohdr_v16_t, so group reads
+    // below can run out of bounds (observed: memcpy fault once starpak vertex
+    // bytes are present; without a starpak the model just has no vertex data).
+    // Bail on out-of-range counts so the model keeps its name and LIST row.
+    if (pStudioHdr->lodCount > 8 || pStudioHdr->groupHeaderCount > 32 || pStudioHdr->numbodyparts > 64)
+    {
+        printf("WARNING: model '%s' has out-of-range lod/group counts (lod=%u groups=%u parts=%u); skipping vertex parse (newer studiohdr?).\n",
+            modelAsset->name ? modelAsset->name : "<unnamed>", pStudioHdr->lodCount, pStudioHdr->groupHeaderCount, pStudioHdr->numbodyparts);
+        return;
+    }
 
     const uint8_t* boneMap = pStudioHdr->boneStateCount ? pStudioHdr->pBoneStates() : s_VertexDataBaseBoneMap; // does this model have remapped bones? use default map if not
 
@@ -729,11 +745,24 @@ static void ParseModelVertexData_v16(CPakAsset* const asset, ModelAsset* const m
 
         std::unique_ptr<char[]> dcmpBuf = nullptr;
 
+        // Guard against revised studiohdr layouts (S30 v19): a group pointing
+        // outside the vertex buffer must be skipped, not memcpy'd.
+        const int64_t dataSize = group->dataCompression == eCompressionType::NONE ? group->dataSizeDecompressed : group->dataSizeCompressed;
+        if (group->dataOffset < 0 || dataSize <= 0 || (uint64_t)group->dataOffset > vertexBufSize || (uint64_t)dataSize > vertexBufSize - (uint64_t)group->dataOffset)
+        {
+            printf("WARNING: model '%s' group %u points outside its vertex buffer (off=%d size=%lld buf=%llu); skipping group.\n",
+                modelAsset->name ? modelAsset->name : "<unnamed>", groupIdx, group->dataOffset, (long long)dataSize, (unsigned long long)vertexBufSize);
+            continue;
+        }
+
+        uint64_t groupDataSize = 0;
+
         // decompress buffer
         switch (group->dataCompression)
         {
         case eCompressionType::NONE:
         {
+            groupDataSize = (uint64_t)group->dataSizeDecompressed;
             dcmpBuf = std::make_unique<char[]>(group->dataSizeDecompressed);
             std::memcpy(dcmpBuf.get(), pDataBuffer + group->dataOffset, group->dataSizeDecompressed);
             break;
@@ -742,11 +771,21 @@ static void ParseModelVertexData_v16(CPakAsset* const asset, ModelAsset* const m
         case eCompressionType::SNOWFLAKE:
         case eCompressionType::OODLE:
         {
+            // Cap the output allocation: a revised studiohdr can carry a wild
+            // decompressed size that would otherwise bad_alloc the process.
+            if (group->dataSizeDecompressed <= 0 || (uint64_t)group->dataSizeDecompressed > 0x10000000u)
+            {
+                printf("WARNING: model '%s' group %u has an implausible decompressed size (%d); skipping group.\n",
+                    modelAsset->name ? modelAsset->name : "<unnamed>", groupIdx, group->dataSizeDecompressed);
+                continue;
+            }
+
             std::unique_ptr<char[]> cmpBuf = std::make_unique<char[]>(group->dataSizeCompressed);
             std::memcpy(cmpBuf.get(), pDataBuffer + group->dataOffset, group->dataSizeCompressed);
 
             uint64_t dataSizeDecompressed = group->dataSizeDecompressed; // this is cringe, can't  be const either, so awesome
             dcmpBuf = RTech::DecompressStreamedBuffer(std::move(cmpBuf), dataSizeDecompressed, group->dataCompression);
+            groupDataSize = dataSizeDecompressed;
 
             break;
         }
@@ -755,6 +794,27 @@ static void ParseModelVertexData_v16(CPakAsset* const asset, ModelAsset* const m
         }
 
         const vg::rev4::VertexGroupHeader_t* grouphdr = reinterpret_cast<vg::rev4::VertexGroupHeader_t*>(dcmpBuf.get());
+
+        // A group table from a revised studiohdr (S30 v19) can point at
+        // non-VG data that happens to sit inside the vertex buffer. Gate the
+        // pointer-heavy sub-parse below on the lod table living inside the
+        // group data; without this a bogus group faults the whole pak load.
+        // (rev4 groups carry no magic, so range-check instead.)
+        if (!dcmpBuf)
+        {
+            printf("WARNING: model '%s' group %u produced no data; skipping group.\n",
+                modelAsset->name ? modelAsset->name : "<unnamed>", groupIdx);
+            continue;
+        }
+
+        const uint64_t lodTableSize = (uint64_t)grouphdr->lodCount * sizeof(vg::rev4::ModelLODHeader_t);
+        if (grouphdr->lodCount > 8 || (uint64_t)grouphdr->lodOffset > groupDataSize || lodTableSize > groupDataSize - (uint64_t)grouphdr->lodOffset)
+        {
+            printf("WARNING: model '%s' group %u has no valid lod table (lods=%u off=%u size=%llu); skipping group.\n",
+                modelAsset->name ? modelAsset->name : "<unnamed>", groupIdx,
+                (unsigned)grouphdr->lodCount, (unsigned)grouphdr->lodOffset, (unsigned long long)groupDataSize);
+            continue;
+        }
 
         uint8_t lodIdx = 0;
         for (uint16_t lodLevel = 0; lodLevel < pStudioHdr->lodCount; lodLevel++)
@@ -797,12 +857,24 @@ static void ParseModelVertexData_v16(CPakAsset* const asset, ModelAsset* const m
 
                     for (uint16_t meshIdx = 0; meshIdx < pModel->meshCountTotal; ++meshIdx)
                     {
+                        // The studiohdr mesh count can overrun the VG lod's
+                        // mesh table on revised layouts; the lod count is the
+                        // binding limit (always >= the model's share on valid
+                        // headers).
+                        if (meshIdx >= lod->meshCount)
+                            break;
+
                         // we do not handle blendstates currently
                         if (meshIdx == pModel->meshCountBase)
                             break;
 
                         const r5::mstudiomesh_v16_t* const pMesh = pModel->pMesh(meshIdx);
                         const vg::rev4::MeshHeader_t* const mesh = lod->pMesh(static_cast<uint8_t>(pMesh->meshid));
+
+                        // meshid comes from the studiohdr side and can miss
+                        // the VG lod's mesh table on revised layouts.
+                        if (!mesh || pMesh->meshid >= lod->meshCount)
+                            continue;
 
                         if (mesh->flags == 0)
                             continue;
@@ -1065,6 +1137,30 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
     {
         ModelAssetHeader_v16_t* hdr = reinterpret_cast<ModelAssetHeader_v16_t*>(pakAsset->header());
         ModelAssetCPU_v16_t* cpu = reinterpret_cast<ModelAssetCPU_v16_t*>(pakAsset->cpu());
+
+        // S30 (r5-300) revises the v19 studiohdr past the bone/material block,
+        // so the v16/v17 parsers (including the ModelAsset ctor itself, which
+        // walks lod groups) fault on it. Gate on count sanity BEFORE
+        // constructing anything; gated models keep their header name and LIST
+        // row with parsing skipped. Full v19-S30 support needs the updated
+        // studiohdr struct.
+        const r5::studiohdr_v16_t* const pStudioHdr = reinterpret_cast<r5::studiohdr_v16_t*>(hdr->data);
+        if (!hdr->data || !cpu || !(pStudioHdr->lodCount <= 8 && pStudioHdr->groupHeaderCount <= 32 && pStudioHdr->numbodyparts <= 128
+            && pStudioHdr->boneCount <= 2048 && pStudioHdr->numlocalattachments <= 2048
+            && pStudioHdr->numtextures <= 2048 && pStudioHdr->numskinfamilies <= 256 && pStudioHdr->numhitboxsets <= 128))
+        {
+            printf("WARNING: model '%s' has an unsupported studiohdr (lod=%u groups=%u parts=%u bones=%u attach=%u txtr=%u); listing without parse.\n",
+                hdr->name ? hdr->name : "<unnamed>",
+                hdr->data ? pStudioHdr->lodCount : 0, hdr->data ? pStudioHdr->groupHeaderCount : 0,
+                hdr->data ? pStudioHdr->numbodyparts : 0, hdr->data ? pStudioHdr->boneCount : 0,
+                hdr->data ? pStudioHdr->numlocalattachments : 0, hdr->data ? pStudioHdr->numtextures : 0);
+            if (ver == eMDLVersion::VERSION_19_1)
+                asset->SetAssetVersion({ 19, 1 });
+            if (hdr->name)
+                pakAsset->SetAssetName(hdr->name, true);
+            break;
+        }
+
         mdlAsset = new ModelAsset(hdr, cpu, streamEntry, ver);
 
         ParseModelBoneData_v19(mdlAsset->GetParsedData());
@@ -1131,9 +1227,14 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
     }
     }
 
-    assertm(mdlAsset->name, "Model had no name.");
-    pakAsset->SetAssetName(mdlAsset->name, true);
-    pakAsset->setExtraData(mdlAsset);
+    assertm(!mdlAsset || mdlAsset->name, "Model had no name.");
+    if (mdlAsset)
+    {
+        pakAsset->SetAssetName(mdlAsset->name, true);
+        pakAsset->setExtraData(mdlAsset);
+    }
+    // else: unsupported layout gated above; name/version already set there,
+    // temp name kept otherwise. No extra data (exporters must null-check).
 }
 
 void PostLoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
@@ -1575,7 +1676,13 @@ bool ExportModelAsset(CAsset* const asset, const int setting)
     const ModelAsset* const modelAsset = reinterpret_cast<ModelAsset*>(pakAsset->extraData());
 
     if (!modelAsset)
+    {
+        // Load skipped parsing (e.g. unsupported newer studiohdr); the LIST
+        // row exists but there is nothing to export.
+        printf("WARNING: skipping export of model 0x%llX '%s' (no parsed data).\n",
+            (unsigned long long)pakAsset->GetAssetGUID(), pakAsset->GetAssetName().c_str());
         return false;
+    }
 
     std::unique_ptr<char[]> streamedData = pakAsset->getStarPakData(modelAsset->vertexStreamingData.offset, modelAsset->vertexStreamingData.size, false);
 

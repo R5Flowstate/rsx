@@ -36,6 +36,12 @@ struct AnimRigAssetHeader_v5_t
 };
 static_assert(sizeof(AnimRigAssetHeader_v5_t) == 0x28);
 
+// S30 (r5-300) arig v7 rigs carry the v19 linear bone block at file offset 218
+// (u16, FIX_OFFSET-encoded) instead of linearboneindex. Validates the block
+// (numbones + chain contiguity) and returns its base, or 0. When valid,
+// outSize receives the studio extent (base + posetobone + 48*bones).
+int ResolveLinearBoneOffset_S30(const char* const studioBase, const int boneCount, int* const outSize);
+
 // [rika]: if we use ModelParsedData_t we could reuse model exporting funcs
 class AnimRigAsset
 {
@@ -111,6 +117,16 @@ public:
 			const int studioDataSize = IALIGN16(FIX_OFFSET(tmp->linearboneindex) + sizeof(r5::mstudiolinearbone_v19_t) + (dataPerBone * tmp->boneCount));
 
 			parsedData = ModelParsedData_t(reinterpret_cast<r5::studiohdr_v17_t*>(data), 0, studioDataSize);
+
+			// S30 rigs have no block at linearboneindex; relocate to the file+218 block when it validates.
+			int s30Size = 0;
+			const int s30Linear = ResolveLinearBoneOffset_S30(reinterpret_cast<const char*>(data), tmp->boneCount, &s30Size);
+
+			if (s30Linear > 0)
+			{
+				parsedData.studiohdr.linearBoneOffset = s30Linear;
+				parsedData.studiohdr.length = s30Size;
+			}
 			break;
 		}
 		}

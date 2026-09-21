@@ -83,6 +83,7 @@ void HandlePakLoad(std::vector<std::string> filePaths)
         else
         {
             //assertm(false, "Parsing pak from file failed.");
+            printf("ERROR: failed to parse pak '%s'; skipping it.\n", fsPath.string().c_str());
             delete pak;
         }
         ++pakLoadingProgress;

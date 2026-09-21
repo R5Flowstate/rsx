@@ -14,6 +14,58 @@
 
 extern ExportSettings_t g_ExportSettings;
 
+// S30 linear block base: u16 at studio file offset 218 (FIX_OFFSET-encoded).
+// In v17-map terms this slot is unkDataOffset; S30 repurposed it while
+// linearboneindex reads 0 on every S30 rig seen.
+static constexpr int s_S30LinearBaseOffset = 218;
+
+int ResolveLinearBoneOffset_S30(const char* const studioBase, const int boneCount, int* const outSize)
+{
+	if (!studioBase || boneCount <= 0 || boneCount > 4096)
+		return 0;
+
+	uint16_t rawBase = 0;
+	memcpy_s(&rawBase, sizeof(rawBase), studioBase + s_S30LinearBaseOffset, sizeof(rawBase));
+
+	const int lb = FIX_OFFSET(rawBase);
+
+	// must sit past the header but inside any sane studio prefix.
+	if (lb < 256 || lb > 0x100000)
+		return 0;
+
+	// 9-u16 header: numbones + 8 array offsets from the block base.
+	uint16_t idx[9];
+	memcpy_s(&idx, sizeof(idx), studioBase + lb, sizeof(idx));
+
+	if (idx[0] != static_cast<uint16_t>(boneCount))
+		return 0;
+
+	// chain contiguity in memory order: flags u32, parent i16, pos, quat,
+	// qalign, scale, rot, posetobone (struct slots rot/posetobone/qalign/scale
+	// are idx[5]/idx[6]/idx[7]/idx[8]). First array starts at 20 (18 B header + pad).
+	const int sizes[8] = { 4 * boneCount, 2 * boneCount, 12 * boneCount, 16 * boneCount, 16 * boneCount, 12 * boneCount, 12 * boneCount, 48 * boneCount };
+	const uint16_t* const order[8] = { &idx[1], &idx[2], &idx[3], &idx[4], &idx[7], &idx[8], &idx[5], &idx[6] };
+
+	int off = 20;
+	for (int i = 0; i < 8; i++)
+	{
+		if (*order[i] != off)
+			return 0;
+
+		off = (off + sizes[i] + 3) & ~3;
+	}
+
+	const int size = lb + idx[6] + 48 * boneCount;
+
+	if (size <= 0 || size > 0x800000)
+		return 0;
+
+	if (outSize)
+		*outSize = size;
+
+	return lb;
+}
+
 void LoadAnimRigAsset(CAssetContainer* const container, CAsset* const asset)
 {
     CPakAsset* pakAsset = static_cast<CPakAsset*>(asset);

@@ -125,6 +125,35 @@ struct MilesSource_v48_t
 static_assert(offsetof(MilesSource_v48_t, minusOne) == 0x40);
 static_assert(sizeof(MilesSource_v48_t) == 80);
 
+// s30 (KNBC v49). 80 bytes. streamDataOffset is relative to the stream
+// data base (RTSC streamDataOffset); streamHeaderOffset is absolute.
+struct MilesSource_v49_t
+{
+	uint64_t nameOffset; // relative to string table
+	uint16_t languageIdx; // sound language ID
+	uint16_t patchIdx; // index of the patch file that contains this sound
+	uint32_t fileSize; // total ADAR payload bytes (header + data)
+	uint16_t sampleRate;
+	uint16_t bitRate;
+
+	uint32_t unk14;
+	float unk18; // 1.0
+	uint32_t unk1C;
+	uint32_t unk20;
+
+	uint32_t streamHeaderSize;
+	uint32_t frameCount;
+	uint32_t unk2C;
+	uint64_t streamHeaderOffset;
+	uint64_t streamDataOffset;
+	uint64_t minusOne;
+	uint32_t unk48;
+	uint32_t frameCountCopy;
+};
+static_assert(offsetof(MilesSource_v49_t, streamHeaderOffset) == 0x30);
+static_assert(offsetof(MilesSource_v49_t, minusOne) == 0x40);
+static_assert(sizeof(MilesSource_v49_t) == 80);
+
 struct MilesSource_t
 {
 	MilesSource_t(const MilesSource_v39_t* const a) :
@@ -144,6 +173,13 @@ struct MilesSource_t
 	MilesSource_t(const MilesSource_v48_t* const a) :
 		streamDataOffset(a->streamDataOffset), streamHeaderOffset(a->streamHeaderOffset),
 		streamDataSize(a->streamDataSize), streamHeaderSize(a->streamHeaderSize),
+		nameOffset(a->nameOffset),
+		languageIdx(a->languageIdx), patchIdx(a->patchIdx)
+	{};
+
+	MilesSource_t(const MilesSource_v49_t* const a) :
+		streamDataOffset(a->streamDataOffset), streamHeaderOffset(a->streamHeaderOffset),
+		streamDataSize(a->fileSize - a->streamHeaderSize), streamHeaderSize(a->streamHeaderSize),
 		nameOffset(a->nameOffset),
 		languageIdx(a->languageIdx), patchIdx(a->patchIdx)
 	{};
@@ -177,6 +213,8 @@ MBNK Versions:
 44 - Apex Legends Season 20.0
 45 - Apex Legends Season 20.1 -> Season 23.0
 46 - Apex Legends Season 23.1 -> Season 24.1
+48 - Apex Legends Season 27.?
+49 - Apex Legends Season 30.0 (DX12-only)
 */
 
 
@@ -301,6 +339,58 @@ struct MilesBankHeader_v45_t
 
 static_assert(offsetof(MilesBankHeader_v45_t, unk_offset_38) == 0x38);
 
+// s30 (KNBC v49). Counts and 32-bit offsets up front, then an OffsetPtr
+// table, then a per-language table. Measured against general.mbnk
+// (BuildTag 0x2CA5E): sounds are 80-byte records filling
+// [sourceOffset, fileSize); the file ends with a 30-byte
+// "SZ <fileSize> HASH <bankHash> END" sentinel. The event table holds
+// eventCount {u32 nameOffset, u32 actionOffset} pairs.
+struct MilesBankHeader_v49_t
+{
+	int magic;
+	int version;
+	uint32_t fileSize;
+
+	int bankMagic;
+	uint32_t buildTag;
+	uint32_t bankHash;
+
+	uint32_t unk_offset_18;
+	uint32_t eventCount;
+	uint32_t unk_20;
+	uint32_t unk_24;
+	uint32_t unk_28;
+	uint32_t eventActionsOffset;
+	uint32_t unk_30;
+	uint32_t sourceOffset;
+	uint32_t nonLocalisedSourceCount;
+	uint32_t localisedSourceCount; // per language
+	uint32_t unk_40;
+	uint32_t unk_44;
+	uint32_t stringTableOffset;
+
+	uint32_t unk_4C;
+
+	OffsetPtr_t unk_offset_50;
+	OffsetPtr_t unk_offset_58;
+	OffsetPtr_t unk_offset_60;
+	OffsetPtr_t eventOffset;
+	OffsetPtr_t stringTableOffsetPtr;
+	OffsetPtr_t unk_offset_78;
+	OffsetPtr_t unk_offset_80;
+	OffsetPtr_t unk_offset_88;
+	OffsetPtr_t unk_offset_90;
+	OffsetPtr_t unk_offset_98;
+
+	uint32_t languageCount;
+};
+
+static_assert(offsetof(MilesBankHeader_v49_t, eventCount) == 0x1C);
+static_assert(offsetof(MilesBankHeader_v49_t, sourceOffset) == 0x34);
+static_assert(offsetof(MilesBankHeader_v49_t, stringTableOffset) == 0x48);
+static_assert(offsetof(MilesBankHeader_v49_t, eventOffset) == 0x68);
+static_assert(offsetof(MilesBankHeader_v49_t, languageCount) == 0xA0);
+
 class CMilesAudioBank : public CAssetContainer
 {
 public:
@@ -388,6 +478,22 @@ private:
 		this->audioSources = m_fileBuf.get() + header->sourceOffset.offset;
 		this->audioEvents = m_fileBuf.get() + header->eventOffset.offset;
 		this->stringTable = m_fileBuf.get() + header->stringTableOffset.offset;
+	}
+
+	void Construct(const MilesBankHeader_v49_t* const header)
+	{
+		this->buildTag = header->buildTag;
+		this->bankHash = header->bankHash;
+
+		// v49 stores every language explicitly; records fill [sourceOffset, fileSize)
+		this->sourceCount = (header->fileSize - header->sourceOffset) / sizeof(MilesSource_v49_t);
+		this->eventCount = header->eventCount;
+
+		this->localisedSourceCount = 0;
+
+		this->audioSources = m_fileBuf.get() + header->sourceOffset;
+		this->audioEvents = m_fileBuf.get() + header->eventOffset.offset;
+		this->stringTable = m_fileBuf.get() + header->stringTableOffset;
 	}
 };
 

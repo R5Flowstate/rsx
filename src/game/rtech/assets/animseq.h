@@ -69,6 +69,7 @@ enum class eSeqVersion : int
 	VERSION_11,
 	VERSION_12,
 	VERSION_12_1,
+	VERSION_13, // S30 (r5-300); structurally identical to v12.1 (116 B seqdesc, 48 B animdesc, external asqd)
 };
 
 static const std::map<int, eSeqVersion> s_seqVersionMap
@@ -79,6 +80,7 @@ static const std::map<int, eSeqVersion> s_seqVersionMap
 	{ 10, eSeqVersion::VERSION_10 },
 	{ 11, eSeqVersion::VERSION_11 },
 	{ 12, eSeqVersion::VERSION_12 },
+	{ 13, eSeqVersion::VERSION_13 },
 };
 
 constexpr uint64_t s_AnimSeqTimeStamp_V12_1 = 0x01DC1DF805C28000; // 09/05/2025 00:00:00
@@ -170,6 +172,7 @@ public:
 			break;
 		}
 		case eSeqVersion::VERSION_12_1:
+		case eSeqVersion::VERSION_13:
 		{
 			r5::mstudioseqdesc_v18_t* const tmp = reinterpret_cast<r5::mstudioseqdesc_v18_t* const>(data);
 
@@ -214,6 +217,7 @@ public:
 	inline const bool UseStall() const { return version == eSeqVersion::VERSION_7 ? false : true; };
 	inline void UpdateDataSize_V12(const int boneCount) { RawSizeV11(boneCount); }
 	inline void UpdateDataSize_V12_1(const int boneCount) { RawSizeV12_1(boneCount); }
+	inline void UpdateDataSize_V13(const int boneCount) { RawSizeV12_1(boneCount); }
 
 private:
 	inline void RawSizeV7()

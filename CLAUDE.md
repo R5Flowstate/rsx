@@ -35,13 +35,19 @@ Valued:
 | `--texturenames` | `guid` / `stored` / `text` / `semantic` |
 | `--parsethreads` `--exportthreads` | `-nogui` only |
 | `--validateout` | CSV path for `-validateshaders` (default `shader_validate.csv`) |
+| `--exportsetting` | repeatable `<type>=<n>` overrides that asset type's export-setting index (e.g. `--exportsetting uiia=0` = PNG HQ; uiia 0=PNG HQ 1=PNG LQ 2=DDS HQ 3=DDS LQ 4=RAW). RAW stays the default. |
+
+Newer-season paks: the mdl_ loader recognises the v19 244-byte studiohdr
+(otherwise the pak listed as empty), and the Miles bank parser reads KNBC
+v49 (`aevt` events list; `--exportguids` applies to audio). Bad inputs warn
+loudly instead of being skipped.
 
 `--list` CSV column `type` is the authoritative `--exporttypes` code.
 Exported files are named **unpadded** (`0x101F…` not `0x0101…`).
 
 `-nogui` takes mutex `Local\RSX_SingleInstance` (second instance waits).
 imgui.ini `[AssetSettings]` is **GUI only**. Headless format = code default
-in `InitXxxAssetType`. Change a format → edit source and rebuild.
+in `InitXxxAssetType`, overridable per type with `--exportsetting`.
 
 ## `--exporttypes` 4cc
 
@@ -60,7 +66,7 @@ and use column `type`.
 | `uiia` | UI image (raw container for RePak) |
 | `uimg` | UI atlas (legacy) |
 | `font` | font atlas |
-| `arig` / `aseq` | anim rig / sequence |
+| `arig` / `aseq` | anim rig / sequence (aseq v13 exports its `asqd` sibling sized by the 6-bit bone-flag walk; arig v7 linear blocks are relocated) |
 | `dtbl` | datatable |
 | `stgs` / `stlt` | settings / layout |
 | `rmap` | map asset |

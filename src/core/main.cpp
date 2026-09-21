@@ -11,6 +11,7 @@
 #include <core/input/input.h>
 #include <core/cache/cachedb.h>
 #include <core/utils/cli_parser.h>
+#include <game/asset.h>
 #include <core/utils/exportsettings.h>
 #include <core/utils/autoupdater.h>
 #include <core/filehandling/load.h>
@@ -32,9 +33,50 @@ ExportSettings_t g_ExportSettings{ .exportNormalRecalcSetting = eNormalExportRec
 };
 
 // Handle CLI to only init certain asset types.
+// --exportsetting <fourcc>=<index>[,<fourcc>=<index>...]: pick a type's export
+// variant headlessly (the imgui.ini value is only read by the GUI).
+static void ApplyExportSettingOverrides(const CCommandLine* const cli)
+{
+    const char* const spec = cli->GetParamValue("--exportsetting");
+    if (!spec)
+        return;
+
+    std::string list(spec);
+    size_t pos = 0;
+    while (pos < list.size())
+    {
+        size_t end = list.find(',', pos);
+        if (end == std::string::npos)
+            end = list.size();
+        const std::string item = list.substr(pos, end - pos);
+        pos = end + 1;
+
+        const size_t eq = item.find('=');
+        if (eq == std::string::npos || eq != 4)
+        {
+            printf("[RSX] --exportsetting: bad entry '%s' (want <fourcc>=<index>)\n", item.c_str());
+            continue;
+        }
+        const uint32_t type = MAKEFOURCC(item[0], item[1], item[2], item[3]);
+        auto it = g_assetData.m_assetTypeBindings.find(type);
+        if (it == g_assetData.m_assetTypeBindings.end())
+        {
+            printf("[RSX] --exportsetting: unknown type '%s'\n", item.substr(0, 4).c_str());
+            continue;
+        }
+        const int idx = atoi(item.c_str() + eq + 1);
+        if (idx < 0 || static_cast<size_t>(idx) >= it->second.e.exportSettingArrSize)
+        {
+            printf("[RSX] --exportsetting: index %d out of range for '%s'\n", idx, item.substr(0, 4).c_str());
+            continue;
+        }
+        it->second.e.exportSetting = idx;
+        printf("[RSX] --exportsetting: %s -> %d (%s)\n", item.substr(0, 4).c_str(), idx, it->second.e.exportSettingArr[idx]);
+    }
+}
+
 static void HandleAssetRegistration(const CCommandLine* const cli)
 {
-    UNUSED(cli);
 
     // import func
     // model
@@ -168,6 +210,8 @@ static void HandleAssetRegistration(const CCommandLine* const cli)
 
     // bluepoint
     InitBluepointWrappedFileAssetType();
+
+    ApplyExportSettingOverrides(cli);
 }
 
 #if defined(NDEBUG) && defined(_WIN32)
@@ -278,6 +322,9 @@ int main(int argc, char* argv[])
 
     // init pak asset types
     HandleAssetRegistration(&cli);
+
+    // Apply any --exportsetting <type>=<n> overrides parsed in SetFromCLI.
+    g_ExportSettings.ApplyExportSettingOverrides();
 
     // get max con-current threads.
     maxConcurrentThreads = std::max(1u, CThread::GetConCurrentThreads());

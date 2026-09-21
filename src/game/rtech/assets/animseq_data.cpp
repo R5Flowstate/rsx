@@ -71,7 +71,7 @@ bool ExportAnimSeqDataAsset(CAsset* const asset, const int setting)
 	return true;
 }
 
-void ParseAnimSeqDataForSeq(ModelSeq_t* const seqdesc, const size_t boneCount)
+void ParseAnimSeqDataForSeq(ModelSeq_t* const seqdesc, const size_t boneCount, const bool sixBitFlags)
 {
 	for (size_t i = 0; i < seqdesc->AnimCount(); i++)
 	{
@@ -113,16 +113,34 @@ void ParseAnimSeqDataForSeq(ModelSeq_t* const seqdesc, const size_t boneCount)
 				if (pSection->isExternal)
 					continue;
 
+				// Take the last inline section, not the first: section data is
+				// laid out in table order, so only a walk from the highest
+				// inline entry covers every inline section. Stopping at the
+				// first truncates multi-inline asqds (S30 gladcard/prop anims
+				// with all sections inline dumped 84 B of a 244 B payload).
 				index = pSection->animindex;
+				break;
 			}
 		}
 
 		const uint8_t* const boneFlagArray = reinterpret_cast<const uint8_t* const>(animdesc->animData + index);
-		const r5::mstudio_rle_anim_t* panim = reinterpret_cast<const r5::mstudio_rle_anim_t*>(&boneFlagArray[ANIM_BONEFLAG_SIZE(boneCount)]);
+		// S30 (seq v13) packs the bone flag array at 6 bits per bone, IALIGN2.
+		const size_t bfaSize = sixBitFlags ? IALIGN2((6 * boneCount + 7) / 8) : ANIM_BONEFLAG_SIZE(boneCount);
+		const r5::mstudio_rle_anim_t* panim = reinterpret_cast<const r5::mstudio_rle_anim_t*>(&boneFlagArray[bfaSize]);
 
 		for (size_t bone = 0; bone < boneCount; bone++)
 		{
-			const uint8_t boneFlags = ANIM_BONEFLAGS_FLAG(boneFlagArray, bone);
+			uint8_t boneFlags;
+			if (sixBitFlags)
+			{
+				const size_t bit = bone * 6;
+				uint32_t v = boneFlagArray[bit / 8] >> (bit % 8);
+				if ((bit % 8) > 2)
+					v |= static_cast<uint32_t>(boneFlagArray[bit / 8 + 1]) << (8 - (bit % 8));
+				boneFlags = static_cast<uint8_t>(v & 0x3F);
+			}
+			else
+				boneFlags = ANIM_BONEFLAGS_FLAG(boneFlagArray, bone);
 
 			// no header for this bone
 			if ((boneFlags & r5::RleBoneFlags_t::STUDIO_ANIM_MASK) == false)

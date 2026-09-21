@@ -21,4 +21,5 @@ public:
 	size_t dataSize;
 };
 
-void ParseAnimSeqDataForSeq(ModelSeq_t* const seqdesc, const size_t boneCount);
+// sixBitFlags: S30 (seq v13) packs the bone flag array at 6 bits per bone.
+void ParseAnimSeqDataForSeq(ModelSeq_t* const seqdesc, const size_t boneCount, const bool sixBitFlags = false);

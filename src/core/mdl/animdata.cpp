@@ -1334,7 +1334,7 @@ void ParseModelSequenceData_Stall_V18(ModelParsedData_t* const parsedData, char*
 	}
 }
 
-extern void ParseAnimSeqDataForSeq(ModelSeq_t* const seqdesc, const size_t boneCount);
+extern void ParseAnimSeqDataForSeq(ModelSeq_t* const seqdesc, const size_t boneCount, const bool sixBitFlags = false);
 void ParseModelSequenceData_Stall_V19_1(ModelParsedData_t* const parsedData, char* const baseptr)
 {
 	assertm(parsedData->bones.size() > 0, "should have bones");

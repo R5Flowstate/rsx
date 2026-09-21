@@ -1,7 +1,10 @@
 #pragma once
 
 #include <core/utils/cli_parser.h>
+#include <cstdint>
 #include <filesystem>
+#include <utility>
+#include <vector>
 
 struct ExportSettings_t
 {
@@ -40,7 +43,14 @@ struct ExportSettings_t
 
     std::filesystem::path exportDirectory;
 
+    // Pending per-type export-setting overrides from --exportsetting <type>=<n>
+    // (parsed in SetFromCLI, applied to the asset type bindings after they are
+    // registered). The uint32_t is the MAKEFOURCC asset type, the int is the
+    // index into that type's export-setting list.
+    std::vector<std::pair<uint32_t, int>> exportSettingOverrides;
+
     void SetFromCLI(const CCommandLine* cli);
+    void ApplyExportSettingOverrides();
 
     void SetExportDirectory(const std::filesystem::path& exportPath)
     {

@@ -52,8 +52,10 @@ void LoadAnimSeqAsset(CAssetContainer* const container, CAsset* const asset)
 		break;
 	}
 	case eSeqVersion::VERSION_12_1:
+	case eSeqVersion::VERSION_13:
 	{
-		asset->SetAssetVersion({ 12, 1 });
+		if (ver == eSeqVersion::VERSION_12_1)
+			asset->SetAssetVersion({ 12, 1 });
 
 		AnimSeqAssetHeader_v8_t* hdr = reinterpret_cast<AnimSeqAssetHeader_v8_t*>(pakAsset->header());
 		seqAsset = new AnimSeqAsset(hdr, streamEntry, ver);
@@ -123,12 +125,13 @@ void PostLoadAnimSeqAsset(CAssetContainer* const container, CAsset* const asset)
 		break;
 	}
 	case eSeqVersion::VERSION_12_1:
+	case eSeqVersion::VERSION_13:
 	{// [rika]: parse the animseq's raw data size in post load if we couldn't determine a bone count before.
 		if (seqAsset->dataSize == 0)
 			seqAsset->UpdateDataSize_V12_1(static_cast<int>(bones->size()));
 
 		// [rika]: I love changing assets, but never ever would change a version!
-		ParseAnimSeqDataForSeq(&seqAsset->seqdesc, bones->size());
+		ParseAnimSeqDataForSeq(&seqAsset->seqdesc, bones->size(), seqAsset->version == eSeqVersion::VERSION_13);
 		ParseSequence(&seqAsset->seqdesc, bones, AnimdataFuncType_t::ANIM_FUNC_STALL_ANIMDATA);
 
 		break;

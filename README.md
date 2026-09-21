@@ -1,42 +1,33 @@
-# RSX ( R5Flowstate/S21 )
+# RSX (R5Flowstate / S21)
 
-reSource Xtractor - extracts and previews Respawn RPak and model assets.
+reSource Xtractor — extract and preview Respawn RPak / model assets. This fork
+is the S21 map-port extractor: it dumps **raw, re-packable** assets that RePak
+can feed back into an S21 pak. Upstream RSX is a general extractor/previewer
+and defaults to processed (not re-packable) output.
 
-Agents view included: CLAUDE.md
+Upstream: [r-ex/rsx](https://github.com/r-ex/rsx).
 
 ## What this fork adds
 
-- Raw export by default: models, textures, materials, `.rseq`, `.rrig`, and
-  `.uiia` with its reloc list.
-- Baked effects: raw `.efct_def` + child/asset GUID sidecars, and a
-  version-dispatched operator list.
-- Shaders: MSW export keeping the feature bytes; v16 headers normalized to
-  the v15 arrangement. No bytecode is recompiled.
-- `--exportpak` / `--exportguids` to export one pak or a GUID closure
-  instead of every loaded pak; `-decompresspak`; `-validateshaders`.
-- `-nogui` single-instance mutex, and post-load no longer busy-waits when a
-  pak has no trailing non-prioritized assets.
-- Crash fixes: bone arrays sized by bone count, unaligned quaternion loads,
-  null-checked unparsed shadersets.
+- **Raw export by default** for models, textures, materials, aseq, arig so
+  RePak can rebuild the same asset.
+- Shader export: MSW by default; v15/v16 feature bytes preserved; v16
+  env-combo count uses the v16 scale indices; SM5.1 permutations replaced
+  with a sibling SM5.0 buffer for the S21 DX11 device.
+- efct: version-dispatched operator-list export + raw `.efct_def` /
+  `.efct_childrefs` / `.efct_assetrefs` sidecars.
+- uiia: raw container export with self-pointer reloc list.
+- `--exportpak` / `--exportguids` for a map's dependency closure instead of
+  dumping an entire pak set.
+- Headless `-nogui` single-instance mutex (concurrent pak loads no longer
+  lock each other).
+- Anim parse: bone arrays sized by bone count (no 256-bone stack overrun);
+  materials null-check an unparsed newer shaderset instead of crashing.
 
-## Usage
+## Building
 
-```
-rsx <file.rpak|file.mdl|...> [-nogui] [-export] [--exporttypes <4cc,...>]
-    [--exportdir <dir>] [-exportfullpaths] [--exportpak <substr>]
-    [--exportguids <file>] [-decompresspak] [-validateshaders] [-keepsm51]
-```
+Open `rsx.sln` and build x64 Release. Output: `bin/Release/rsx.exe`.
 
-```
-# headless raw extract
-rsx map.rpak -nogui -export -exportfullpaths
-
-# only the assets a map pak owns
-rsx common.rpak map.rpak -nogui -export --exportpak map
-
-# a GUID closure, one guid per line
-rsx common.rpak -nogui -export --exportguids closure.txt
-```
-
-Upstream: [r-ex/rsx](https://github.com/r-ex/rsx), by way of
-[kralrindo/rsx](https://github.com/kralrindo/rsx).
+By using this software, you acknowledge that the software is provided "as is",
+without any representations, warranties, conditions, or liabilities, to the
+extent permitted by law.

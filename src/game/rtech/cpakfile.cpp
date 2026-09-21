@@ -103,6 +103,7 @@ const bool CPakFile::ParseFileBuffer(const std::string& path)
         break;
     }
     default:
+        printf("ERROR: unsupported pak version %d in '%s'; skipping pak.\n", (int)header()->version, GetFilePath().string().c_str());
         return false;
     }
 
@@ -414,6 +415,7 @@ const bool CPakFile::LoadAndPatchPakFileData()
         if (numIterations > 100)
         {
             assert(0); // If this gets hit, patching has almost definitely failed.
+            printf("ERROR: pak patch stream failed to converge after 100 iterations in '%s'; skipping pak.\n", GetFilePath().string().c_str());
             return false;
         }
 

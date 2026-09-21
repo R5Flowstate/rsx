@@ -231,6 +231,63 @@ const bool CMilesAudioBank::ParseFromHeader()
 
 		break;
 	}
+	case 49: // bank version 49 (s30)
+	{
+		this->languageCount = 10;
+		this->m_languageNames = {
+			"english", "french", "german", "spanish", "italian",
+			"japanese", "polish", "russian", "mandarin", "korean"
+		};
+
+		const MilesBankHeader_v49_t* const header = reinterpret_cast<MilesBankHeader_v49_t*>(m_fileBuf.get());
+
+		this->Construct(header);
+
+		this->DiscoverStreamingFiles();
+
+		Log("MBNK: Parsing sources...\n");
+		for (uint32_t i = 0; i < this->sourceCount; ++i)
+		{
+			const MilesSource_v49_t* const source = reinterpret_cast<MilesSource_v49_t*>(reinterpret_cast<char*>(this->audioSources) + (i * sizeof(MilesSource_v49_t)));
+			MilesSource_t* const sourceAssetData = new MilesSource_t(source);
+
+			if (!IsValidSource(sourceAssetData))
+				continue;
+
+			const char* const sourceName = this->GetString(sourceAssetData->nameOffset);
+
+			CMilesAudioAsset* sourceAsset = new CMilesAudioAsset(sourceName, sourceAssetData, this);
+			sourceAsset->SetAssetType((uint32_t)AssetType_t::ASRC); // asrc - audio source
+			sourceAsset->SetAssetGUID(RTech::StringToGuid(sourceName));
+			sourceAsset->SetAssetVersion({ m_version });
+
+			sourceAsset->SetContainerName(GetStreamingFileNameForSource(sourceAssetData));
+
+			g_assetData.v_assets.push_back({ sourceAsset->GetAssetGUID(), sourceAsset });
+		}
+
+		// v49 merges the event name table with the action table: eventCount
+		// {u32 nameOffset, u32 actionOffset} pairs. Register one asset per
+		// event so --list covers every event name (proof against the digest).
+		Log("MBNK: Parsing events...\n");
+		const char* const eventTable = reinterpret_cast<char*>(this->audioEvents);
+		for (uint32_t i = 0; i < this->eventCount; ++i)
+		{
+			const uint32_t nameOffset = *reinterpret_cast<const uint32_t*>(eventTable + (i * 8));
+			const char* const eventName = this->GetString(nameOffset);
+
+			CMilesAudioAsset* eventAsset = new CMilesAudioAsset(eventName, nullptr, this);
+			eventAsset->SetAssetType((uint32_t)AssetType_t::AEVT); // aevt - audio event
+			eventAsset->SetAssetGUID(RTech::StringToGuid(eventName));
+			eventAsset->SetAssetVersion({ m_version });
+
+			eventAsset->SetContainerName(GetBankStem());
+
+			g_assetData.v_assets.push_back({ eventAsset->GetAssetGUID(), eventAsset });
+		}
+
+		break;
+	}
 	default:
 		return false;
 	}
@@ -407,6 +464,9 @@ bool ExportAudioSourceAsset(CAsset* const asset, const int setting)
 
 	std::vector<float> interleavedBuffer = std::vector<float>(channels * samplesCount);
 	float* outputBuffer = interleavedBuffer.data();
+
+	fprintf(stderr, "ASRCDBG decode-start %s expect=%u\n",
+		audioAsset->GetAssetName().c_str(), samplesCount);
 
 	std::vector<char> stream_data;
 

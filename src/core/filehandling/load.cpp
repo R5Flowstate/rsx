@@ -255,8 +255,10 @@ void OnCLILoadComplete(const CCommandLine* const cli)
 
                 if (!exportGuids.empty())
                 {
-                    if (it.m_asset->GetAssetContainerType() != CAssetContainer::ContainerType::PAK ||
-                        exportGuids.find(reinterpret_cast<CPakAsset*>(it.m_asset)->GetAssetGUID()) == exportGuids.end())
+                    const auto containerType = it.m_asset->GetAssetContainerType();
+                    if ((containerType != CAssetContainer::ContainerType::PAK &&
+                         containerType != CAssetContainer::ContainerType::AUDIO) ||
+                        exportGuids.find(it.m_asset->GetAssetGUID()) == exportGuids.end())
                         continue;
                 }
 
@@ -368,6 +370,12 @@ void HandleLoadFromCommandLine(const CCommandLine* const cli)
         if (std::filesystem::exists(path) && std::filesystem::is_regular_file(path))
         {
             filePaths.emplace_back(path.string());
+        }
+        else
+        {
+            // A missing input used to be skipped silently, producing an empty
+            // asset list with exit 0. Warn so a broken path is obvious.
+            printf("ERROR: input file not found: '%s'; skipping it.\n", cli->GetParamValue(i));
         }
     }
 
