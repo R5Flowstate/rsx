@@ -2,7 +2,9 @@
 #include <core/math/vector2d.h>
 #include <core/math/vector.h>
 
+// pose-parameter slots: 15 in v1, 19 in v2 -- the only layout change between them
 #define ANIR_MAX_ELEMENTS 15
+#define ANIR_MAX_ELEMENTS_V2 19
 #define ANIR_MAX_SEQUENCES 48
 #define ANIR_MAX_RECORDED_FRAMES 3000
 
@@ -34,13 +36,14 @@ struct AnimRecordingOverlay_s
 	int slot;
 };
 
-struct AnimRecordingAssetHeader_v0_t
+template <int NumElements>
+struct AnimRecordingAssetHeader_t
 {
 	// For both of these arrays, there is room for 15 elements, but the code that writes them stops after 12
 	// See 0x140DD9360
 	// Both of these take their values from mstudioposeparamdesc_t
-	char* poseParamNames[ANIR_MAX_ELEMENTS];
-	Vector2D poseParamValues[ANIR_MAX_ELEMENTS]; // { startValue, endValue - startValue }
+	char* poseParamNames[NumElements];
+	Vector2D poseParamValues[NumElements]; // { startValue, endValue - startValue }
 	
 	char* animSequences[ANIR_MAX_SEQUENCES];
 	char* unkString[16];
@@ -62,6 +65,11 @@ struct AnimRecordingAssetHeader_v0_t
 	bool isPersistent;
 	short runtimeRefCounter;
 };
+
+typedef AnimRecordingAssetHeader_t<ANIR_MAX_ELEMENTS> AnimRecordingAssetHeader_v0_t;
+typedef AnimRecordingAssetHeader_t<ANIR_MAX_ELEMENTS_V2> AnimRecordingAssetHeader_v2_t;
+static_assert(sizeof(AnimRecordingAssetHeader_v0_t) == 816);
+static_assert(sizeof(AnimRecordingAssetHeader_v2_t) == 880);
 
 #define ANIR_FILE_MAGIC ('R'<<24 | 'I'<<16 | 'N'<<8 | 'A')
 #define ANIR_FILE_VERSION 1 // increment this if the file format changes.
@@ -88,4 +96,3 @@ struct AnimRecordingFileHeader_s
 };
 #pragma pack(pop)
 
-static_assert(sizeof(AnimRecordingAssetHeader_v0_t) == 0x330);

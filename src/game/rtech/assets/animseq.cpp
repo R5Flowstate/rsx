@@ -164,10 +164,21 @@ void* PreviewAnimSeqAsset(CAsset* const asset, const bool firstFrameForAsset)
 
 static bool ExportRawAnimSeqAsset(CPakAsset* const asset, const AnimSeqAsset* const animSeqAsset, std::filesystem::path& exportPath)
 {
-	UNUSED(asset);
+	// The v11 size walk derives a bone count from weightlist offsets, which is 0 or negative
+	// for sequences without a weightlist; the blob's extent in its page bounds it either way.
+	size_t dataSize = animSeqAsset->dataSize;
+	const size_t regionSize = Pak_RegionSizeAt(asset, animSeqAsset->data);
+	if (!dataSize || (regionSize && dataSize > regionSize))
+		dataSize = regionSize;
+
+	if (!dataSize)
+	{
+		Log("ANIMSEQ: 0x%llX has no measurable data; skipped raw export.\n", asset->GetAssetGUID());
+		return false;
+	}
 
 	StreamIO seqOut(exportPath.string(), eStreamIOMode::Write);
-	seqOut.write(reinterpret_cast<const char*>(animSeqAsset->data), animSeqAsset->dataSize);
+	seqOut.write(reinterpret_cast<const char*>(animSeqAsset->data), dataSize);
 	seqOut.close();
 
 	if (animSeqAsset->dataExtraSize)
@@ -369,7 +380,7 @@ bool ExportAnimSeqAsset(CAsset* const asset, const int setting)
 	// QC files should only be generated when exporting rigs as SMD, which includes all associated animations.
 	// Individual RSEQ SMD exports only produce the SMD file itself.
 
-	// raw (.rseq) export has no parsedData/rig -> must not deref it (was a null-deref bug).
+	// raw (.rseq) export has no parsedData or rig.
 	return ExportAnimSeqAsset(pakAsset, setting, animSeqAsset, exportPath, rigName, parsedData ? parsedData->GetRig() : nullptr);
 }
 

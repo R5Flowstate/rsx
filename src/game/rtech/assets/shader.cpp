@@ -763,8 +763,7 @@ bool ExportShaderAsset(CAsset* const asset, const int setting)
 
 	const ShaderAsset* const shaderAsset = pakAsset->extraData<const ShaderAsset* const>();
 
-	// null on any version LoadShaderAsset does not handle; the assert that used to
-	// stand here is compiled out of release, so this dereferenced null instead.
+	// null on any version LoadShaderAsset does not handle.
 	if (!shaderAsset)
 		return false;
 

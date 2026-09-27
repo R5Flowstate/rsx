@@ -52,6 +52,8 @@ struct WepnAssetHeader_v1_t
 };
 static_assert(sizeof(WepnAssetHeader_v1_t) == 32);
 
+std::string R_GetWepnTreeAsJson(CPakAsset* const pakAsset);
+
 class WeaponAsset
 {
 public:

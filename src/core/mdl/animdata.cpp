@@ -1023,11 +1023,7 @@ void ParseAnimation(ModelSeq_t* const seqdesc, ModelAnim_t* const animdesc, cons
 {
 	const int boneCount = static_cast<int>(bones->size());
 
-	// One entry per bone, heap allocated. These were fixed 256-entry STACK arrays
-	// written through `positions[i]` for i < boneCount, so a model with more than
-	// 256 bones overran the stack and tripped /GS: __report_gsfailure -> fastfail
-	// 0xC0000409, which no SEH handler can catch, so RSX died silently with no
-	// crash log and no output at all.
+	// One entry per bone, on the heap: models can exceed 256 bones.
 	std::vector<Vector> positions(boneCount);
 	std::vector<Quaternion> quats(boneCount);
 	std::vector<Vector> scales(boneCount);

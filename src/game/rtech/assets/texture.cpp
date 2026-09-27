@@ -862,7 +862,13 @@ static const char* GetMipNameForType(const eTextureMipType type)
     return "unknown";
 }
 
-static void ExportTextureMetaData(const TextureAsset* const txtrAsset, std::filesystem::path& exportPath)
+// v10 header bytes [0x14, 0x38): dataSize, the mip split, texture type and the
+// compressed-mip table. RePak overlays them (as "$hdrTail") to rebuild the header
+// exactly; they come from the loaded asset, so a patched texture exports its patched tail.
+static constexpr size_t TXTR_V10_TAIL_OFF = 0x14;
+static constexpr size_t TXTR_V10_TAIL_END = 0x38;
+
+static void ExportTextureMetaData(CPakAsset* const asset, const TextureAsset* const txtrAsset, std::filesystem::path& exportPath)
 {
     exportPath.replace_extension(".json");
     std::ofstream ofs(exportPath, std::ios::out);
@@ -899,6 +905,16 @@ static void ExportTextureMetaData(const TextureAsset* const txtrAsset, std::file
         }
     }
 
+    if (asset->version() == 10 && asset->data()->headerStructSize >= TXTR_V10_TAIL_END)
+    {
+        const uint8_t* const hdr = reinterpret_cast<const uint8_t*>(asset->header());
+
+        ofs << "\t\"hdrTail\": \"";
+        for (size_t i = TXTR_V10_TAIL_OFF; i < TXTR_V10_TAIL_END; i++)
+            ofs << std::format("{:02x}", hdr[i]);
+        ofs << "\",\n";
+    }
+
     ofs << "\t\"resourceFlags\": \"0x" << std::uppercase << std::hex << (uint32_t)txtrAsset->layerCount << "\",\n";
     ofs << "\t\"usageFlags\": \"0x" << std::uppercase << std::hex << (uint32_t)txtrAsset->usageFlags << "\"\n";
 
@@ -908,7 +924,7 @@ static void ExportTextureMetaData(const TextureAsset* const txtrAsset, std::file
 bool ExportDdsTextureAsset(CPakAsset* const asset, const TextureAsset* const txtrAsset, std::filesystem::path& exportPath, const int setting, const bool isNormal)
 {
     // [rika]: run this first, the file name can be altered if a texture is an array. not to mention we likely want this data if exporting as dds.
-    ExportTextureMetaData(txtrAsset, exportPath);
+    ExportTextureMetaData(asset, txtrAsset, exportPath);
 
     // Add extension | replace the .rpak ext.
     exportPath.replace_extension("dds");

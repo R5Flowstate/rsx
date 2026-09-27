@@ -1430,5 +1430,9 @@ private:
 };
 
 
+// Bytes from ptr to the next allocation start in its pak page; 0 if ptr is not in one.
+class CPakAsset;
+size_t Pak_RegionSizeAt(CPakAsset* const asset, const void* const ptr);
+
 // used for type init funcs
 typedef void(*PakTypeInitFunc_t)(void);

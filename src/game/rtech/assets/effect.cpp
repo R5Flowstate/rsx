@@ -4,6 +4,9 @@
 #include <game/rtech/cpakfile.h>
 #include <game/rtech/utils/utils.h>
 #include <thirdparty/imgui/imgui.h>
+#include <deque>
+#include <map>
+#include <mutex>
 
 extern ExportSettings_t g_ExportSettings;
 static const char* const s_PathPrefixEFCT = s_AssetTypePaths.find(AssetType_t::EFCT)->second;
@@ -174,6 +177,201 @@ static void ExportEffectParticleDef(CPakAsset* const pakAsset, const std::string
     f.close();
 }
 
+// Where every pointed-to allocation starts, per page: each pointer target, each asset's
+// cpu start, and each page end. A region runs from one of these to the next.
+struct PakRegionMap_s
+{
+    struct Page_s { const char* start; const char* end; int index; };
+    struct Pointer_s { uint32_t field; int targetPage; uint32_t targetOff; };
+
+    std::vector<Page_s> pagesByAddress;
+    std::vector<std::vector<uint32_t>> boundaries;  // per page, sorted
+    std::vector<std::vector<Pointer_s>> pointers;   // per page, sorted by field
+
+    bool Locate(const char* const ptr, int& page, uint32_t& off) const
+    {
+        auto it = std::upper_bound(pagesByAddress.begin(), pagesByAddress.end(), ptr,
+            [](const char* p, const Page_s& pg) { return p < pg.start; });
+        if (it == pagesByAddress.begin())
+            return false;
+        --it;
+        if (ptr >= it->end)
+            return false;
+        page = it->index;
+        off = static_cast<uint32_t>(ptr - it->start);
+        return true;
+    }
+};
+
+static const PakRegionMap_s& Pak_GetRegionMap(CPakFile* const pak)
+{
+    static std::mutex s_mutex;
+    static std::unordered_map<const CPakFile*, std::unique_ptr<PakRegionMap_s>> s_cache;
+
+    std::lock_guard<std::mutex> lock(s_mutex);
+
+    if (const auto it = s_cache.find(pak); it != s_cache.end())
+        return *it->second;
+
+    auto map = std::make_unique<PakRegionMap_s>();
+    const std::vector<char*>& buffers = pak->GetPageBuffers();
+    const PakPageHdr_t* const pageHeaders = pak->header()->GetPageHeaders();
+    const int pageCount = pak->pageCount();
+
+    map->boundaries.resize(pageCount);
+    map->pointers.resize(pageCount);
+
+    for (int p = 0; p < pageCount; ++p)
+    {
+        if (!buffers[p])
+            continue;
+        map->pagesByAddress.push_back({ buffers[p], buffers[p] + pageHeaders[p].size, p });
+        map->boundaries[p].push_back(pageHeaders[p].size);
+    }
+    std::sort(map->pagesByAddress.begin(), map->pagesByAddress.end(),
+        [](const auto& a, const auto& b) { return a.start < b.start; });
+
+    for (int i = 0; i < pak->assetCount(); ++i)
+    {
+        const uint64_t guid = *reinterpret_cast<const uint64_t*>(pak->rawAsset(i));
+        CPakAsset* const other = g_assetData.FindAssetByGUID<CPakAsset>(guid);
+        int page; uint32_t off;
+        if (other && other->GetContainerFile<CPakFile>() == pak && other->cpu() && map->Locate(other->cpu(), page, off))
+            map->boundaries[page].push_back(off);
+    }
+
+    const PakPointerHdr_t* const ptrHeaders = pak->GetPointerHeaders();
+    for (int i = 0; i < pak->pointerCount(); ++i)
+    {
+        const int fieldPage = ptrHeaders[i].index;
+        if (fieldPage < 0 || fieldPage >= pageCount || !buffers[fieldPage])
+            continue;
+
+        const uint32_t field = static_cast<uint32_t>(ptrHeaders[i].offset);
+        const char* const target = *reinterpret_cast<const char* const*>(buffers[fieldPage] + field);
+
+        int targetPage; uint32_t targetOff;
+        if (!target || !map->Locate(target, targetPage, targetOff))
+            continue;
+
+        map->boundaries[targetPage].push_back(targetOff);
+        map->pointers[fieldPage].push_back({ field, targetPage, targetOff });
+    }
+
+    for (int p = 0; p < pageCount; ++p)
+    {
+        std::vector<uint32_t>& b = map->boundaries[p];
+        std::sort(b.begin(), b.end());
+        b.erase(std::unique(b.begin(), b.end()), b.end());
+
+        std::sort(map->pointers[p].begin(), map->pointers[p].end(),
+            [](const auto& a, const auto& b) { return a.field < b.field; });
+    }
+
+    return *(s_cache[pak] = std::move(map));
+}
+
+size_t Pak_RegionSizeAt(CPakAsset* const asset, const void* const ptr)
+{
+    CPakFile* const pak = asset->GetContainerFile<CPakFile>();
+    if (!pak || !ptr)
+        return 0;
+
+    const PakRegionMap_s& map = Pak_GetRegionMap(pak);
+
+    int page; uint32_t off;
+    if (!map.Locate(static_cast<const char*>(ptr), page, off))
+        return 0;
+
+    const std::vector<uint32_t>& b = map.boundaries[page];
+    return *std::upper_bound(b.begin(), b.end(), off) - off;
+}
+
+// Re-packable <name>.efct_def, the input of RePak's efct v16 writer:
+// ['EFCT'][version 1][blobSize][pointerCount][blob][pointerCount x (fieldOffset, targetOffset)],
+// both offsets blob-relative. The blob is the definition plus everything reachable from it
+// by pointer -- the operator arrays and operators live in a persistent segment apart from
+// the definition, so a contiguous slice would miss them.
+static bool ExportEffectRawDef(CPakAsset* const asset, const std::string& outBase)
+{
+    CPakFile* const pak = asset->GetContainerFile<CPakFile>();
+    if (!pak || !asset->cpu())
+        return false;
+
+    const PakRegionMap_s& map = Pak_GetRegionMap(pak);
+    const std::vector<char*>& buffers = pak->GetPageBuffers();
+
+    int rootPage; uint32_t rootOff;
+    if (!map.Locate(asset->cpu(), rootPage, rootOff))
+    {
+        printf("[EFCT-RAW] 0x%llX: definition not in any page\n", asset->GetAssetGUID());
+        return false;
+    }
+
+    std::vector<char> blob;
+    std::vector<std::pair<uint32_t, uint32_t>> links;
+    std::map<std::pair<int, uint32_t>, uint32_t> placed; // (page, offset) -> blob offset
+    std::deque<std::pair<int, uint32_t>> queue;
+
+    auto Place = [&](const int page, const uint32_t off) -> uint32_t
+    {
+        if (const auto it = placed.find({ page, off }); it != placed.end())
+            return it->second;
+
+        const std::vector<uint32_t>& b = map.boundaries[page];
+        const uint32_t end = *std::upper_bound(b.begin(), b.end(), off);
+
+        const uint32_t at = static_cast<uint32_t>(IALIGN(blob.size(), 16));
+        blob.resize(at + (end - off));
+        memcpy(&blob[at], buffers[page] + off, end - off);
+
+        placed[{ page, off }] = at;
+        queue.emplace_back(page, off);
+        return at;
+    };
+
+    Place(rootPage, rootOff);
+
+    while (!queue.empty())
+    {
+        const auto [page, off] = queue.front();
+        queue.pop_front();
+
+        const uint32_t base = placed[{ page, off }];
+        const std::vector<uint32_t>& b = map.boundaries[page];
+        const uint32_t end = *std::upper_bound(b.begin(), b.end(), off);
+
+        const auto& ptrs = map.pointers[page];
+        auto it = std::lower_bound(ptrs.begin(), ptrs.end(), off,
+            [](const PakRegionMap_s::Pointer_s& p, uint32_t v) { return p.field < v; });
+
+        for (; it != ptrs.end() && it->field + sizeof(void*) <= end; ++it)
+        {
+            const uint32_t target = Place(it->targetPage, it->targetOff);
+            links.emplace_back(base + (it->field - off), target);
+        }
+    }
+
+    std::sort(links.begin(), links.end());
+
+    StreamIO out;
+    if (!out.open(outBase + ".efct_def", eStreamIOMode::Write))
+        return false;
+
+    const uint32_t head[4] = { 0x54434645u /*'EFCT'*/, 1u, static_cast<uint32_t>(blob.size()), static_cast<uint32_t>(links.size()) };
+    out.write(reinterpret_cast<const char*>(head), sizeof(head));
+    out.write(blob.data(), blob.size()); // pointer fields are rewritten from the link table on repack
+
+    for (const auto& [field, target] : links)
+    {
+        const uint32_t link[2] = { field, target };
+        out.write(reinterpret_cast<const char*>(link), sizeof(link));
+    }
+
+    out.close();
+    return true;
+}
+
 // RAW efct exporter: dependency-graph subheader + the operator ParticleDefinition.
 static bool ExportEffectAsset(CAsset* const asset, const int setting)
 {
@@ -239,6 +437,10 @@ static bool ExportEffectAsset(CAsset* const asset, const int setting)
 
     // 3) ParticleDefinition (name + operators), version-dispatched
     ExportEffectParticleDef(pakAsset, outBase, d->guid, d->version, hdrSize);
+
+    // 4) the definition blob itself, re-packable (v16 24-byte header family)
+    if (d->version == 16 && hdrSize == 24)
+        ExportEffectRawDef(pakAsset, outBase);
 
     return true;
 }

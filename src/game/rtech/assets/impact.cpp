@@ -61,13 +61,13 @@ std::string R_GetImpactDefinitionAsString(const WepnData_v1_t* const key, const 
 
 bool ExportImpactAsset(CAsset* const asset, const int setting)
 {
-    UNUSED(setting);
 
     CPakAsset* pakAsset = static_cast<CPakAsset*>(asset);
 
     const WepnAssetHeader_v1_t* const header = reinterpret_cast<WepnAssetHeader_v1_t* const>(pakAsset->header());
 
-    const std::string impactTxt = R_GetImpactDefinitionAsString(header->rootKey, "");
+    const bool asJson = setting == 0;
+    const std::string impactTxt = asJson ? R_GetWepnTreeAsJson(pakAsset) : R_GetImpactDefinitionAsString(header->rootKey, "");
 
     // Create exported path + asset path.
     std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
@@ -85,7 +85,7 @@ bool ExportImpactAsset(CAsset* const asset, const int setting)
     }
 
     exportPath.append(impactPath.filename().string());
-    exportPath.replace_extension(".txt");
+    exportPath.replace_extension(asJson ? ".json" : ".txt");
 
     StreamIO out;
     if (!out.open(exportPath.string(), eStreamIOMode::Write))
@@ -102,7 +102,7 @@ bool ExportImpactAsset(CAsset* const asset, const int setting)
 
 void InitImpactAssetType()
 {
-    static const char* settings[] = { "TXT" };
+    static const char* settings[] = { "JSON", "TXT" };
     AssetTypeBinding_t type =
     {
         .name = "Impact Definition",

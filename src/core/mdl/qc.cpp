@@ -2716,7 +2716,7 @@ namespace qc
 		// localhierarchy		(todo)
 		// forceboneposrot		(unable to replicate) (forces a bone translation and updates child bones)
 		// bonedriver			(unable to replicate) (reference bone driver is not stored, and only updates local values)
-		// reverse				(unable to replicate) (compiles the animation backwards, possible to decompile if any sign of it being used are stored(apex anim names?))
+		// reverse				(unable to replicate) (compiles the animation backwards)
 		// appendanim			(unable to replicate) (appends another animation on the end of this, compiled in)
 
 		UNUSED(count);

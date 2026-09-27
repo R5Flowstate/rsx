@@ -1071,6 +1071,47 @@ bool ExportUIAsset(CAsset* const asset, const int setting)
                     isV401 = true;
             }
 
+            // v42 ships with both 26- and 28-byte text widgets and the container name does
+            // not say which. A wrong guess undercounts every text widget, the walk then reads
+            // types from the middle of widgets, and the exported blob is truncated. Walk both
+            // tables and keep the one that parses cleanly and fits before the next section.
+            if (pakAsset->version() == 42 && !isV421)
+            {
+                const uint8_t* rj = hdr->renderJobs;
+                const auto walk = [&](const uint32_t* sizes, size_t& total) -> bool
+                {
+                    total = 0;
+                    for (int i = 0; i < hdr->renderJobCount; i++)
+                    {
+                        const uint16_t t = *reinterpret_cast<const uint16_t*>(rj + total);
+                        if (t > 5)
+                            return false;
+                        total += sizes[t];
+                    }
+                    return true;
+                };
+
+                size_t gap = SIZE_MAX;
+                const uint8_t* next[] = {
+                    reinterpret_cast<const uint8_t*>(hdr->name),
+                    reinterpret_cast<const uint8_t*>(hdr->defaultValues),
+                    hdr->transformData,
+                    reinterpret_cast<const uint8_t*>(hdr->argClusters),
+                    reinterpret_cast<const uint8_t*>(hdr->args),
+                    reinterpret_cast<const uint8_t*>(hdr->styleDescriptors),
+                    reinterpret_cast<const uint8_t*>(hdr->mappingData),
+                };
+                for (const uint8_t* p : next)
+                    if (p > rj && static_cast<size_t>(p - rj) < gap)
+                        gap = static_cast<size_t>(p - rj);
+
+                size_t size42 = 0, size421 = 0;
+                const bool ok42 = walk(V42_WIDGET_SIZES, size42) && size42 <= gap;
+                const bool ok421 = walk(V421_WIDGET_SIZES, size421) && size421 <= gap;
+                if (ok421 && (!ok42 || size421 > size42))
+                    isV421 = true;
+            }
+
             size_t offset = 0;
             for (int jobIdx = 0; jobIdx < hdr->renderJobCount; jobIdx++)
             {

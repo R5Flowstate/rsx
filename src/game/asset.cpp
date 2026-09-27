@@ -135,12 +135,7 @@ void CGlobalAssetData::ProcessAssetsPostLoad()
         g_pImGuiHandler->FinishProgressBarEvent(processingAssetsEvent);
     }
 
-    // Post-load is complete whether or not there were trailing non-prioritized ("leftover")
-    // assets to process. This flag USED to be set INSIDE the leftover branch above, so any
-    // loaded set whose post-sort tail is a prioritized type -- i.e. zero leftover assets, the
-    // (leftOverAssets == assetIdx + 1) case -- returned with it still false. The -nogui
-    // OnCLILoadComplete() then busy-waited on it forever, pinning a CPU core (the "CLI hangs at
-    // high CPU on some paks while the GUI extracts them fine" bug). Set it unconditionally.
+    // Set even when there were no leftover assets: -nogui OnCLILoadComplete() waits on it.
     this->m_donePostLoad = true;
 }
 

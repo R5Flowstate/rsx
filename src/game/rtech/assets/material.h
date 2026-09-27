@@ -801,9 +801,8 @@ public:
 	MaterialShaderType_t materialType;
 	uint8_t uberBufferFlags;
 
-	// v23 on-disk param fields, exported for byte-1:1 repak. RSX reads them into the v22 hdr but
-	// the unified struct + json export previously dropped them (-> repak wrote 0 -> wrong shader
-	// binding). The dxState unk_28 byte lives in dxStates[0].unk_28.
+	// v23 on-disk param fields, exported so RePak rebuilds the header byte for byte; the shader
+	// binding depends on them. The dxState unk_28 byte lives in dxStates[0].unk_28.
 	int unk_C0[2]{};    // @0xC0
 	int unk_CC = 0;     // @0xCC
 	float unk_E8 = 0.f; // @0xE8

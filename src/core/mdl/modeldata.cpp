@@ -59,7 +59,6 @@ void Vertex_t::ParseVertexFromVG(Vertex_t* const vert, VertexWeight_t* const wei
 	}
 	case vg::eVertPositionType::VG_POS_PACKED48:
 	{
-		// [rika]: not sure the format on this one, currently only used on switch and I can't be asked to find tools to decompile a shader at this time
 		vert->position = Vector(0.0f);
 		offset += 0x6;
 

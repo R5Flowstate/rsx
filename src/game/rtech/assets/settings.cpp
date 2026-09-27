@@ -4,6 +4,30 @@
 #include <game/rtech/utils/utils.h>
 #include <thirdparty/imgui/imgui.h>
 
+// Asset paths are written with forward slashes; every other string keeps its bytes.
+static void AppendJsonString(std::string& out, const char* str, const bool assetPath = false)
+{
+	out.push_back('"');
+	for (; *str; ++str)
+	{
+		const unsigned char c = (assetPath && *str == '\\') ? '/' : static_cast<unsigned char>(*str);
+		switch (c)
+		{
+		case '"': out.append("\\\""); break;
+		case '\\': out.append("\\\\"); break;
+		case '\n': out.append("\\n"); break;
+		case '\r': out.append("\\r"); break;
+		case '\t': out.append("\\t"); break;
+		default:
+			if (c < 0x20)
+				out.append(std::format("\\u{:04x}", c));
+			else
+				out.push_back(static_cast<char>(c));
+		}
+	}
+	out.push_back('"');
+}
+
 void LoadSettingsAsset(CAssetContainer* pak, CAsset* asset)
 {
 	UNUSED(pak);
@@ -300,7 +324,7 @@ void SettingsAsset::R_WriteSetFile(std::string& out, const size_t indentLevel, c
 	case eSettingsFieldType::ST_ASSET_NOPRECACHE:
 	{
 		const char* const charBuf = *(const char**)&valData[field->valueOffset];
-		out.append(std::format("\"{:s}\"", charBuf));
+		AppendJsonString(out, charBuf, field->dataType != eSettingsFieldType::ST_STRING);
 		break;
 	}
 	case eSettingsFieldType::ST_ARRAY:
@@ -391,7 +415,9 @@ void SettingsAsset::R_WriteModValues(std::string& out, const SettingsLayoutAsset
 					out += std::format("\"value\": {:f},\n", modValue->value.floatValue);
 				break;
 			case SettingsModType_e::kString:
-				out += std::format("\"value\": \"{:s}\",\n", &stringData[modValue->value.stringOffset]);
+				out += "\"value\": ";
+				AppendJsonString(out, &stringData[modValue->value.stringOffset]);
+				out += ",\n";
 				break;
 			}
 
@@ -418,7 +444,9 @@ static bool RenderSettingsAsset(CPakAsset* const asset, std::string& stringStrea
 
 	const SettingsLayoutAsset* const layout = settingsAsset->layoutAsset->extraData<SettingsLayoutAsset*>();
 
-	stringStream += std::string("{\n") + "\t\"layoutAsset\": \"" + layout->name + "\",\n";
+	stringStream += "{\n\t\"layoutAsset\": ";
+	AppendJsonString(stringStream, layout->name, true);
+	stringStream += ",\n";
 
 	if (settingsAsset->uniqueId)
 		stringStream += std::format("\t\"uniqueId\": {:d},\n", settingsAsset->uniqueId);
@@ -446,7 +474,6 @@ static bool RenderSettingsAsset(CPakAsset* const asset, std::string& stringStrea
 		stringStream += std::format(",\n\t\"$modFlags\": {:d}\n", settingsAsset->modFlags);
 
 	stringStream += "\n}";
-	FixSlashes(stringStream);
 
 	return true;
 }

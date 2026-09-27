@@ -373,8 +373,6 @@ void HandleLoadFromCommandLine(const CCommandLine* const cli)
         }
         else
         {
-            // A missing input used to be skipped silently, producing an empty
-            // asset list with exit 0. Warn so a broken path is obvious.
             printf("ERROR: input file not found: '%s'; skipping it.\n", cli->GetParamValue(i));
         }
     }

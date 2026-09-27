@@ -18,15 +18,9 @@ void LoadAnimRecordingAsset(CAssetContainer* const container, CAsset* const asse
 extern ExportSettings_t g_ExportSettings;
 static const char* const s_PathPrefixANIR = s_AssetTypePaths.find(AssetType_t::ANIR)->second;
 
-static bool ExportAnimRecordingAsset(CAsset* const asset, const int setting)
+template <typename Header>
+static bool ExportAnimRecordingAsset_t(CPakAsset* const pakAsset)
 {
-    UNUSED(setting);
-
-    CPakAsset* pakAsset = static_cast<CPakAsset*>(asset);
-
-    if (pakAsset->version() != 1)
-        return false; // 1 is currently the only supported version.
-
     // Create exported path + asset path.
     std::filesystem::path exportPath = g_ExportSettings.GetExportDirectory();
     const std::filesystem::path anirPath(pakAsset->GetAssetName());
@@ -48,7 +42,7 @@ static bool ExportAnimRecordingAsset(CAsset* const asset, const int setting)
 
     StreamIO anirOut(exportPath.string(), eStreamIOMode::Write);
 
-    AnimRecordingAssetHeader_v0_t* const hdr = reinterpret_cast<AnimRecordingAssetHeader_v0_t*>(pakAsset->header());
+    Header* const hdr = reinterpret_cast<Header*>(pakAsset->header());
     AnimRecordingFileHeader_s fileHdr;
 
     fileHdr.magic = ANIR_FILE_MAGIC;
@@ -75,7 +69,7 @@ static bool ExportAnimRecordingAsset(CAsset* const asset, const int setting)
     int stringBufLen = 0;
 
     // Write out the pose parameters.
-    for (int i = 0; i < ANIR_MAX_ELEMENTS; i++)
+    for (int i = 0; i < static_cast<int>(ARRAYSIZE(hdr->poseParamNames)); i++)
     {
         const char* const poseParamName = hdr->poseParamNames[i];
 
@@ -144,6 +138,24 @@ static bool ExportAnimRecordingAsset(CAsset* const asset, const int setting)
     }
 
     return true;
+}
+
+static bool ExportAnimRecordingAsset(CAsset* const asset, const int setting)
+{
+    UNUSED(setting);
+
+    CPakAsset* pakAsset = static_cast<CPakAsset*>(asset);
+
+    // v2 only grows the pose-parameter arrays from 15 to 19 slots.
+    switch (pakAsset->version())
+    {
+    case 1:
+        return ExportAnimRecordingAsset_t<AnimRecordingAssetHeader_v0_t>(pakAsset);
+    case 2:
+        return ExportAnimRecordingAsset_t<AnimRecordingAssetHeader_v2_t>(pakAsset);
+    default:
+        return false;
+    }
 }
 
 void InitAnimRecordingAssetType()
