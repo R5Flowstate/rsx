@@ -265,6 +265,7 @@ void PostLoadMaterialAsset(CAssetContainer* const container, CAsset* const asset
     const uint32_t txtrCount = static_cast<uint32_t>((static_cast<char*>(materialAsset->streamingTextureHandles) - static_cast<char*>(materialAsset->textureHandles)) / sizeof(uint64_t));
     const uint64_t* txtrHandles = static_cast<uint64_t*>(materialAsset->textureHandles);
 
+    materialAsset->txtrAssets.clear();
     for (uint32_t i = 0; i < txtrCount; ++i, ++txtrHandles)
     {
         const uint64_t txtrGuid = *txtrHandles;

@@ -104,10 +104,11 @@ void CGlobalAssetData::ProcessAssetsPostLoad()
     }
 
     const uint32_t leftOverAssets = static_cast<uint32_t>(v_assets.size());
-    assetIdx = typeRanges.empty() ? 0u : static_cast<uint32_t>(typeRanges.back().end); // last asset we processed after custom order.
+    // The custom-order ranges end inclusively; the leftover pass starts after them, or the
+    // last ordered asset is post-loaded twice (a material then lists its textures twice).
+    assetIdx = typeRanges.empty() ? 0u : static_cast<uint32_t>(typeRanges.back().end + 1);
 
-    // we have to account for that .size() on vector starts from 1.
-    if (typeRanges.empty() || leftOverAssets != (assetIdx + 1))
+    if (assetIdx < leftOverAssets)
     {
         parallelTask.addTask([this, leftOverAssets, &assetIdx]
             {
