@@ -35,6 +35,7 @@ void LoadShaderAsset(CAssetContainer* pak, CAsset* asset)
 		shaderAsset = new ShaderAsset(hdr, reinterpret_cast<ShaderAssetCPU_t*>(pakAsset->cpu()));
 		break;
 	}
+	case 21: // 48-byte header, same layout as v14. Outer magic is DXBC; the chunk is DXIL.
 	case 14:
 	{
 		ShaderAssetHeader_v14_t* hdr = reinterpret_cast<ShaderAssetHeader_v14_t*>(pakAsset->header());
@@ -825,7 +826,8 @@ std::map<uint32_t, ShaderResource> ResourceBindingFromDXBlob(CPakAsset* const as
 
 	std::map<uint32_t, ShaderResource> bindings;
 
-	if (!shaderAsset->data)
+	// A shader whose version the loader does not handle has no extra data.
+	if (!shaderAsset || !shaderAsset->data)
 		return bindings;
 
 	const DXBCHeader* const hdr = reinterpret_cast<DXBCHeader*>(shaderAsset->data);
@@ -864,7 +866,7 @@ std::vector<TmpConstBufVar> ConstBufVarFromDXBlob(CPakAsset* const asset, const 
 
 	std::vector<TmpConstBufVar> vars;
 
-	if (!shaderAsset->data)
+	if (!shaderAsset || !shaderAsset->data)
 		return vars;
 
 	const DXBCHeader* const hdr = reinterpret_cast<DXBCHeader*>(shaderAsset->data);

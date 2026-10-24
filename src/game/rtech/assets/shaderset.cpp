@@ -26,6 +26,12 @@ void LoadShaderSetAsset(CAssetContainer* const pak, CAsset* const asset)
 		shdsAsset = new ShaderSetAsset(hdr);
 		break;
 	}
+	case 15:
+	{
+		ShaderSetAssetHeader_v15_t* hdr = reinterpret_cast<ShaderSetAssetHeader_v15_t*>(pakAsset->header());
+		shdsAsset = new ShaderSetAsset(hdr);
+		break;
+	}
 	case 12:
 	{
 		ShaderSetAssetHeader_v12_t* hdr = reinterpret_cast<ShaderSetAssetHeader_v12_t*>(pakAsset->header());
@@ -92,6 +98,7 @@ void PostLoadShaderSetAsset(CAssetContainer* const pak, CAsset* const asset)
 	case 12:
 	case 13:
 	case 14:
+	case 15:
 		break;
 	default:
 		return;

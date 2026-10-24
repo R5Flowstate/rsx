@@ -127,6 +127,27 @@ struct ShaderSetAssetHeader_v14_t
 };
 static_assert(sizeof(ShaderSetAssetHeader_v14_t) == 64);
 
+// same size as v12, but the counts sit right after the name instead of after reserved_inputFlags
+struct ShaderSetAssetHeader_v15_t
+{
+	uint64_t reserved_vftable;
+
+	char* name;
+
+	uint16_t textureInputCounts[2];
+
+	uint16_t numSamplers;
+
+	uint8_t firstResourceBindPoint;
+	uint8_t numResources;
+
+	uint8_t reserved_18[40];
+
+	uint64_t vertexShader;
+	uint64_t pixelShader;
+};
+static_assert(sizeof(ShaderSetAssetHeader_v15_t) == 80);
+
 
 class ShaderSetAsset
 {
@@ -141,6 +162,8 @@ public:
 	ShaderSetAsset(ShaderSetAssetHeader_v13_t* const hdr) : name(hdr->name), numVertexShaderTextures(hdr->textureInputCounts[1] - hdr->textureInputCounts[0]), numPixelShaderTextures(hdr->textureInputCounts[0]), numSamplers(hdr->numSamplers), firstResourceBindPoint(hdr->firstResourceBindPoint), numResources(hdr->numResources), vertexShader(hdr->vertexShader), pixelShader(hdr->pixelShader), vertexShaderAsset(nullptr), pixelShaderAsset(nullptr)
 	{ };
 	ShaderSetAsset(ShaderSetAssetHeader_v14_t* const hdr) : name(hdr->name), numVertexShaderTextures(hdr->textureInputCounts[1] - hdr->textureInputCounts[0]), numPixelShaderTextures(hdr->textureInputCounts[0]), numSamplers(hdr->numSamplers), firstResourceBindPoint(hdr->firstResourceBindPoint), numResources(hdr->numResources), vertexShader(hdr->vertexShader), pixelShader(hdr->pixelShader), vertexShaderAsset(nullptr), pixelShaderAsset(nullptr)
+	{ };
+	ShaderSetAsset(ShaderSetAssetHeader_v15_t* const hdr) : name(hdr->name), numVertexShaderTextures(hdr->textureInputCounts[1] - hdr->textureInputCounts[0]), numPixelShaderTextures(hdr->textureInputCounts[0]), numSamplers(hdr->numSamplers), firstResourceBindPoint(hdr->firstResourceBindPoint), numResources(hdr->numResources), vertexShader(hdr->vertexShader), pixelShader(hdr->pixelShader), vertexShaderAsset(nullptr), pixelShaderAsset(nullptr)
 	{ };
 
 	char* name;

@@ -783,6 +783,25 @@ bool CPakFile::AllocateSegments()
     // Stores the total size of all pages within each segment. Does not account for alignment padding
     size_t segmentTotalPageDataSize[PAK_MAX_SEGMENTS] = {};
 
+    // Custom paks (RePak) can declare segment sizes that are smaller than the pages need once each page is
+    // aligned inside its segment. Work out the real size so the buffers never end up undersized.
+    size_t segmentEffectiveSize[PAK_MAX_SEGMENTS] = {};
+    {
+        size_t simulatedOffsets[PAK_MAX_SEGMENTS] = {};
+        for (int pageIdx = 0; pageIdx < this->pageCount(); ++pageIdx)
+        {
+            const PakPageHdr_t* const page = &this->header()->GetPageHeaders()[pageIdx];
+            simulatedOffsets[page->segment] = IALIGN(simulatedOffsets[page->segment], static_cast<size_t>(page->align)) + page->size;
+        }
+        for (int segmentIdx = 0; segmentIdx < this->segmentCount(); ++segmentIdx)
+        {
+            const PakSegmentHdr_t* const segment = &this->header()->GetSegmentHeaders()[segmentIdx];
+            segmentEffectiveSize[segmentIdx] = std::max(static_cast<size_t>(segment->size), simulatedOffsets[segmentIdx]);
+            if (segmentEffectiveSize[segmentIdx] != static_cast<size_t>(segment->size))
+                printf("[RSX] segment %i declares %lld bytes but its pages need %lld; using the larger size.\n", segmentIdx, (long long)segment->size, (long long)segmentEffectiveSize[segmentIdx]);
+        }
+    }
+
     for (int segmentIdx = 0; segmentIdx < this->segmentCount(); ++segmentIdx)
     {
         const PakSegmentHdr_t* const segment = &this->header()->GetSegmentHeaders()[segmentIdx];
@@ -799,7 +818,7 @@ bool CPakFile::AllocateSegments()
             segmentNextPageOffsets[segmentIdx] = collectionSizeAligned;
 
             // align collection size to the alignment of the new segment, then add the new segment's size
-            collection->dataSize = collectionSizeAligned + segment->size;
+            collection->dataSize = collectionSizeAligned + segmentEffectiveSize[segmentIdx];
 
             // if the segment's alignment is greater than the collection's existing alignment, we need to increase the alignment
             // to accommodate this segment. this guarantees that this segment is able to align itself to its required boundary
@@ -857,11 +876,9 @@ bool CPakFile::AllocateSegments()
 
     for (int i = 0; i < this->segmentCount(); ++i)
     {
-        const PakSegmentHdr_t* const segment = &this->header()->GetSegmentHeaders()[i];
-
         // Subtract the size of all of the pages from the segment's size
         // This leaves the total data size that is used for aligning each page to its required alignment within the buffer
-        const size_t actualSegmentAlignmentPadding = segment->size - segmentTotalPageDataSize[i];
+        const size_t actualSegmentAlignmentPadding = segmentEffectiveSize[i] - segmentTotalPageDataSize[i];
 
         if (actualSegmentAlignmentPadding < segmentRequiredAlignmentPadding[i])
         {

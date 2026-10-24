@@ -97,6 +97,8 @@ void PostLoadAnimSeqAsset(CAssetContainer* const container, CAsset* const asset)
 	}
 	assertm(!bones->empty(), "we should have bones at this point.");
 
+	try
+	{
 	switch (seqAsset->version)
 	{
 	case eSeqVersion::VERSION_7:
@@ -138,6 +140,12 @@ void PostLoadAnimSeqAsset(CAssetContainer* const container, CAsset* const asset)
 	}
 	default:
 		break;
+	}
+	}
+	catch (const std::exception& e)
+	{
+		printf("[RSX] animseq 0x%llX post-load parse failed (%s); sequence left unparsed.\n", (unsigned long long)pakAsset->GetAssetGUID(), e.what());
+		return;
 	}
 
 	// the sequence has been parsed for exporting
