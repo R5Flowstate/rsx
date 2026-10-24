@@ -132,8 +132,12 @@ void PostLoadAnimSeqAsset(CAssetContainer* const container, CAsset* const asset)
 		if (seqAsset->dataSize == 0)
 			seqAsset->UpdateDataSize_V12_1(static_cast<int>(bones->size()));
 
+		const bool sixBitFlags = seqAsset->version == eSeqVersion::VERSION_13;
+		for (int i = 0; i < seqAsset->seqdesc.AnimCount(); i++)
+			seqAsset->seqdesc.anims[i].sixBitFlags = sixBitFlags;
+
 		// [rika]: I love changing assets, but never ever would change a version!
-		ParseAnimSeqDataForSeq(&seqAsset->seqdesc, bones->size(), seqAsset->version == eSeqVersion::VERSION_13);
+		ParseAnimSeqDataForSeq(&seqAsset->seqdesc, bones->size(), sixBitFlags);
 		ParseSequence(&seqAsset->seqdesc, bones, AnimdataFuncType_t::ANIM_FUNC_STALL_ANIMDATA);
 
 		break;

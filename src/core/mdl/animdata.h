@@ -298,6 +298,25 @@ struct ModelAnim_t
 
 	size_t parsedBufferIndex;
 
+	bool sixBitFlags = false; // seq v13+: the bone flag array packs 6 bits per bone instead of 4
+
+	inline size_t BoneFlagArraySize(const size_t boneCount) const
+	{
+		return sixBitFlags ? IALIGN2((6 * boneCount + 7) / 8) : ANIM_BONEFLAG_SIZE(boneCount);
+	}
+
+	inline uint8_t BoneFlags(const uint8_t* const boneFlagArray, const size_t bone) const
+	{
+		if (!sixBitFlags)
+			return ANIM_BONEFLAGS_FLAG(boneFlagArray, bone);
+
+		const size_t bit = bone * 6;
+		uint32_t v = boneFlagArray[bit / 8] >> (bit % 8);
+		if ((bit % 8) > 2)
+			v |= static_cast<uint32_t>(boneFlagArray[bit / 8 + 1]) << (8 - (bit % 8));
+		return static_cast<uint8_t>(v & 0x3F);
+	}
+
 	inline const float GetCycle(const int iframe) const
 	{
 		const float cycle = numframes > 1 ? static_cast<float>(iframe) / static_cast<float>(numframes - 1) : 0.0f;

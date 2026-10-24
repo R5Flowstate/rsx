@@ -51,7 +51,7 @@ ModelFrameMovement_t::ModelFrameMovement_t(const r5::mstudioframemovement_t* con
 // animdesc
 ModelAnim_t::ModelAnim_t(const ModelAnim_t& animdesc) : baseptr(animdesc.baseptr), name(animdesc.name), fps(animdesc.fps), flags(animdesc.flags), numframes(animdesc.numframes), animindex(animdesc.animindex),
 	nummovements(animdesc.nummovements), movements(animdesc.movements), framemovement(nullptr), numikrules(animdesc.numikrules), ikrules(nullptr),
-	sectionframes(animdesc.sectionframes), sectionstallframes(animdesc.sectionstallframes), numsections(animdesc.numsections), sections(nullptr), sectionDataExtra(animdesc.sectionDataExtra), animData(animdesc.animData), animDataAsset(animdesc.animDataAsset), parsedBufferIndex(animdesc.parsedBufferIndex)
+	sectionframes(animdesc.sectionframes), sectionstallframes(animdesc.sectionstallframes), numsections(animdesc.numsections), sections(nullptr), sectionDataExtra(animdesc.sectionDataExtra), animData(animdesc.animData), animDataAsset(animdesc.animDataAsset), parsedBufferIndex(animdesc.parsedBufferIndex), sixBitFlags(animdesc.sixBitFlags)
 {
 	if (animdesc.sections)
 	{
@@ -1086,7 +1086,7 @@ void ParseAnimation(ModelSeq_t* const seqdesc, ModelAnim_t* const animdesc, cons
 
 			int sectionlength = 0;
 			const uint8_t* const boneFlagArray = reinterpret_cast<const uint8_t* const>((animdesc->*s_AnimdataFuncs_DP[funcType])(&iLocalFrame, &sectionlength));
-			const r5::mstudio_rle_anim_t* panim = reinterpret_cast<const r5::mstudio_rle_anim_t*>(&boneFlagArray[ANIM_BONEFLAG_SIZE(boneCount)]);
+			const r5::mstudio_rle_anim_t* panim = reinterpret_cast<const r5::mstudio_rle_anim_t*>(&boneFlagArray[animdesc->BoneFlagArraySize(boneCount)]);
 
 			for (int bone = 0; bone < boneCount; bone++)
 			{
@@ -1094,7 +1094,7 @@ void ParseAnimation(ModelSeq_t* const seqdesc, ModelAnim_t* const animdesc, cons
 				Quaternion q(quats[bone]);
 				Vector scale(scales[bone]);
 
-				uint8_t boneFlags = ANIM_BONEFLAGS_FLAG(boneFlagArray, bone); // truncate byte offset then shift if needed
+				uint8_t boneFlags = animdesc->BoneFlags(boneFlagArray, bone);
 				const uint8_t* panimtrack = reinterpret_cast<const uint8_t*>(panim + 1);
 				const float fLocalFrame = static_cast<float>(iLocalFrame) + s;
 
@@ -1168,7 +1168,7 @@ void ParseAnimation(ModelSeq_t* const seqdesc, ModelAnim_t* const animdesc, cons
 
 			int sectionlength = 0;
 			const uint8_t* const boneFlagArray = reinterpret_cast<const uint8_t* const>((animdesc->*s_AnimdataFuncs_RLE[funcType])(&iLocalFrame, &sectionlength));
-			const r5::mstudio_rle_anim_t* panim = reinterpret_cast<const r5::mstudio_rle_anim_t*>(&boneFlagArray[ANIM_BONEFLAG_SIZE(boneCount)]);
+			const r5::mstudio_rle_anim_t* panim = reinterpret_cast<const r5::mstudio_rle_anim_t*>(&boneFlagArray[animdesc->BoneFlagArraySize(boneCount)]);
 			UNUSED(sectionlength);
 
 			for (int bone = 0; bone < boneCount; bone++)
@@ -1178,7 +1178,7 @@ void ParseAnimation(ModelSeq_t* const seqdesc, ModelAnim_t* const animdesc, cons
 				Vector scale(scales[bone]);
 				RadianEuler baseRot(rotations[bone]);
 
-				uint8_t boneFlags = ANIM_BONEFLAGS_FLAG(boneFlagArray, bone); // truncate byte offset then shift if needed
+				uint8_t boneFlags = animdesc->BoneFlags(boneFlagArray, bone);
 
 				if (boneFlags & (r5::RleBoneFlags_t::STUDIO_ANIM_DATA)) // check if this bone has data
 				{
