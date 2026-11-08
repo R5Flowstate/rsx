@@ -635,7 +635,8 @@ const bool CPakFile::DecompressFileBuffer(const char* fileBuffer, std::shared_pt
         // [rika]: dcmpSize is decompressed pak's size (header & oodle compression), this buffer is for the decompresed pakfile.
         std::shared_ptr<char[]> dcmpBuf = std::shared_ptr<char[]>(new char[header->dcmpSize] {});
 
-        const size_t compressedDataSize = header->cmpSize; // [rika]: cmpSize is the size of all compresed data in the pakfile (does not include header).
+        // cmpSize is the pak file size including the header; retail paks hide an over-read behind a trailing signature.
+        const size_t compressedDataSize = header->cmpSize - header->pakHdrSize;
 
         // allocate a buffer for just the compressed file data
         // since the oodle decomp util func needs just the compressed data
