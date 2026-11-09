@@ -290,7 +290,8 @@ void* PreviewSettingsLayoutAsset(CAsset* const asset, const bool firstFrameForAs
 static bool ExportSettingsLayoutInternal(const SettingsLayoutAsset* const hdr, const char* const path,
 	const size_t relativePathIndex, std::vector<std::string>* const pSubLayouts)
 {
-	std::vector<std::string> subLayouts;
+	// Indexed by valueSubLayoutIdx, which need not follow field order; importers resolve layoutIndex through this list.
+	std::vector<std::string> subLayouts(hdr->subHeaders.size());
 
 	std::stringstream out;
 	out << SETTINGS_LAYOUT_TABLE_HEADER;
@@ -314,8 +315,11 @@ static bool ExportSettingsLayoutInternal(const SettingsLayoutAsset* const hdr, c
 
 			const SettingsLayoutAsset* const sub = &hdr->subHeaders[field.valueSubLayoutIdx];
 
-			if (!ExportSettingsLayoutInternal(sub, subPath.c_str(), relativePathIndex, &subLayouts))
+			std::vector<std::string> subPathOut;
+			if (!ExportSettingsLayoutInternal(sub, subPath.c_str(), relativePathIndex, &subPathOut))
 				return false;
+
+			subLayouts[field.valueSubLayoutIdx] = subPathOut.back();
 		}
 	}
 
