@@ -15,7 +15,7 @@ class UIFontAtlasAsset;
 constexpr uint32_t FONT_TEXTURE_IDX_INVALID = 0xffffffff;
 constexpr int FONT_UTF16_QMARK = L'?';
 constexpr int FONT_UTF16_BOX = 0x25A1;
-constexpr int FONT_MAX_PROPORTIONS = 8;
+constexpr int FONT_MAX_PROPORTIONS = 64;
 
 #define MAX_FONTS 32
 
@@ -335,10 +335,10 @@ public:
     };
 
     UIFontHeader(const UIFontHeader_v7_t* const font) : name(font->name), fontIndex(font->fontIndex), textureIndex(font->textureIndex), proportionScaleX(font->proportionScaleX), proportionScaleY(font->proportionScaleY),
-        glyphIndex(font->glyphIndex), unicodeIndex(font->unicodeIndex), errorGlyph(0), numProportions(font->numProportions), numGlyphTextures(0u), numUnicodeTextures(font->numTextures), proportions(), glyphTextures(nullptr), unicodeTextures(nullptr),
+        glyphIndex(font->glyphIndex), unicodeIndex(font->unicodeIndex), errorGlyph(0), numProportions(font->numProportions > FONT_MAX_PROPORTIONS ? static_cast<uint16_t>(FONT_MAX_PROPORTIONS) : font->numProportions), numGlyphTextures(0u), numUnicodeTextures(font->numTextures), proportions(), glyphTextures(nullptr), unicodeTextures(nullptr),
         unicodeMap(nullptr), glyphChunks(nullptr), glyphChunksIndex(nullptr), glyphChunksMask(nullptr), unicodeChunks(font->unicodeChunks), unicodeChunksIndex(font->unicodeChunksIndex), unicodeChunksMask(font->unicodeChunksMask), numGlyphChunks(font->numGlyphChunks), numUnicodeChunks(font->numUnicodeChunks), numUnicodeMaps(0u)
     {
-        for (uint16_t i = 0; i < font->numProportions; i++)
+        for (uint16_t i = 0; i < numProportions; i++)
             proportions[i] = UIFontProportion(&font->proportions[i]);
 
         if (numUnicodeTextures)
@@ -351,12 +351,12 @@ public:
     };
 
     UIFontHeader(const UIFontHeader_v12_t* const font) : name(font->name), fontIndex(font->fontIndex), textureIndex(font->textureIndex), proportionScaleX(font->proportionScaleX), proportionScaleY(font->proportionScaleY),
-        glyphIndex(font->glyphIndex), unicodeIndex(font->unicodeIndex), errorGlyph(font->errorGlyph), numProportions(font->numProportions), numGlyphTextures(font->numGlyphTextures), numUnicodeTextures(font->numUnicodeTextures), proportions(), glyphTextures(nullptr), unicodeTextures(nullptr),
+        glyphIndex(font->glyphIndex), unicodeIndex(font->unicodeIndex), errorGlyph(font->errorGlyph), numProportions(font->numProportions > FONT_MAX_PROPORTIONS ? static_cast<uint16_t>(FONT_MAX_PROPORTIONS) : font->numProportions), numGlyphTextures(font->numGlyphTextures), numUnicodeTextures(font->numUnicodeTextures), proportions(), glyphTextures(nullptr), unicodeTextures(nullptr),
         unicodeMap(nullptr), glyphChunks(font->glyphChunks), glyphChunksIndex(font->glyphChunksIndex), glyphChunksMask(font->glyphChunksMask), unicodeChunks(font->unicodeChunks), unicodeChunksIndex(font->unicodeChunksIndex), unicodeChunksMask(font->unicodeChunksMask), numGlyphChunks(font->numGlyphChunks), numUnicodeChunks(font->numUnicodeChunks), numUnicodeMaps(0u)
     {
         assertm(fontIndex < MAX_FONTS, "assure max number of fonts is unchanged");
 
-        for (uint16_t i = 0; i < font->numProportions; i++)
+        for (uint16_t i = 0; i < numProportions; i++)
             proportions[i] = UIFontProportion(&font->proportions[i]);
 
         if (numUnicodeTextures)
