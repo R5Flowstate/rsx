@@ -82,6 +82,7 @@ static const std::map<int, eSeqVersion> s_seqVersionMap
 	{ 12, eSeqVersion::VERSION_12 },
 	{ 13, eSeqVersion::VERSION_13 },
 	{ 14, eSeqVersion::VERSION_13 }, // S30 map paks: same header, seqdesc and animdesc as v13
+	{ 16, eSeqVersion::VERSION_13 }, // S31: same header, seqdesc and animdesc as v13
 };
 
 constexpr uint64_t s_AnimSeqTimeStamp_V12_1 = 0x01DC1DF805C28000; // 09/05/2025 00:00:00
