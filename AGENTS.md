@@ -42,6 +42,20 @@ Newer-season paks: the mdl_ loader recognises the v19 244-byte studiohdr
 v49 (`aevt` events list; `--exportguids` applies to audio). Bad inputs warn
 loudly instead of being skipped.
 
+S30/S31 formats:
+
+| type | versions | how |
+|------|----------|-----|
+| `mdl_` | 20 (S30), 21 (S31) | body rebuilt to v17 at load (`model_s30.cpp`); raw export keeps the original body and stored `.vg`/`.vg_static` |
+| `ui` | 43 (S31) | header remapped (two zero 8-byte inserts at +0x40 and +0x58); bodies as v42 |
+| `efct` | 35/36 (S30), 38 (S31) | operator lists at 0x188 like v31; raw `.efct_def` for every baked version |
+| `cube` | 2 (S30), 3 (S31) | `cubemap` type: DDS (BC6H_UF16 cube, face-major) or RAW (`cube=1`) |
+| `aseq` | 14, 16 | read as v13 |
+| `font` | 12 (S31) | up to 64 proportions |
+
+Map paks may have a `(01)` patch next to them; RSX applies it, so exports
+can differ from a decompressed copy of the base pak alone.
+
 `--list` CSV column `type` is the authoritative `--exporttypes` code.
 Exported files are named **unpadded** (`0x101F…` not `0x0101…`).
 
