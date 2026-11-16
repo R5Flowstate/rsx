@@ -1,4 +1,5 @@
 #pragma once
+#include <bit>
 #include <game/rtech/utils/studio/optimize.h>
 #include <game/rtech/utils/studio/phyfile.h>
 #include <game/rtech/utils/bsp/bspflags.h>
@@ -1214,7 +1215,16 @@ inline const char* StudioContentFlagString(const int contents)
 	}
 	default:
 	{
-		assertm(false, "invalid or new studio content flag");
+		// Apex contents bits with no QC keyword: written as the hex literal of the bit.
+		static const char* const s_ContentBitNames[32] = {
+			"0x00000001", "0x00000002", "0x00000004", "0x00000008", "0x00000010", "0x00000020", "0x00000040", "0x00000080",
+			"0x00000100", "0x00000200", "0x00000400", "0x00000800", "0x00001000", "0x00002000", "0x00004000", "0x00008000",
+			"0x00010000", "0x00020000", "0x00040000", "0x00080000", "0x00100000", "0x00200000", "0x00400000", "0x00800000",
+			"0x01000000", "0x02000000", "0x04000000", "0x08000000", "0x10000000", "0x20000000", "0x40000000", "0x80000000",
+		};
+		const unsigned int bits = static_cast<unsigned int>(contents);
+		if (bits && (bits & (bits - 1)) == 0)
+			return s_ContentBitNames[std::countr_zero(bits)];
 		return nullptr;
 	}
 	};

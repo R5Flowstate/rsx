@@ -181,6 +181,9 @@ namespace qc
 	// GENERIC COMMANDS
 	//
 
+	// Command being written on this thread, named in the null-string warning below.
+	static thread_local const char* s_qcWritingCommand = nullptr;
+
 	// parse option formatting and call write function for option data
 	void CommandOption_Write(const CommandOption_t* option, CTextBuffer* const text, const bool writeSpace, const CommentStyle_t commentStyle)
 	{
@@ -262,6 +265,7 @@ namespace qc
 		const CommandInfo_t* const info = command->info;
 		const CommandOption_t* const options = command->options;
 		const uint32_t numOptions = command->numOptions;
+		s_qcWritingCommand = info ? info->name : nullptr;
 
 		const bool formatComment = command->IsComment(); // are we using comment formatting on this command?
 
@@ -401,7 +405,10 @@ namespace qc
 			// [rika]: wrap in quotation marks
 			text->WriteCharacter('\"');
 
-			text->WriteString(strings[i]);
+			if (strings[i])
+				text->WriteString(strings[i]);
+			else
+				printf("WARNING: QC command '%s' has a null string option; written empty.\n", s_qcWritingCommand ? s_qcWritingCommand : "?");
 
 			// [rika]: wrap in quotation marks
 			text->WriteCharacter('\"');
@@ -1025,6 +1032,7 @@ namespace qc
 		const CommandInfo_t* const info = command->info;
 		const CommandOption_t* const options = command->options;
 		const uint32_t numOptions = command->numOptions;
+		s_qcWritingCommand = info ? info->name : nullptr;
 
 		assertm(info->id == CommandList_t::QC_KEYVALUES, "command was not $keyvalues");
 		assertm(numOptions == 1u, "$keyvalues can only have one option");
@@ -1075,6 +1083,7 @@ namespace qc
 		const CommandInfo_t* const info = command->info;
 		const CommandOption_t* const options = command->options;
 		const uint32_t numOptions = command->numOptions;
+		s_qcWritingCommand = info ? info->name : nullptr;
 
 		assertm(info->id == CommandList_t::QC_COLLISIONTEXT, "command was not $collisiontext");
 		assertm(numOptions == 1u, "$collisiontext can only have one option");
