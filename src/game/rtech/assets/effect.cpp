@@ -45,6 +45,7 @@ static size_t OperatorListOffset(const EfctLayout layout, const int version)
     case EfctLayout::Baked_24B:
         if (version == 16) return 0x160; // v16
         if (version == 31) return 0x188; // v31
+        if (version == 35 || version == 36 || version == 38) return 0x188; // S30 v35/v36, S31 v38: parms still 352B
         return 0;                        // other baked versions: parms size unknown
     case EfctLayout::V5_24B:    return 0x1A0;
     case EfctLayout::V2_16B:    return 0x140;
@@ -438,8 +439,8 @@ static bool ExportEffectAsset(CAsset* const asset, const int setting)
     // 3) ParticleDefinition (name + operators), version-dispatched
     ExportEffectParticleDef(pakAsset, outBase, d->guid, d->version, hdrSize);
 
-    // 4) the definition blob itself, re-packable (v16 24-byte header family)
-    if (d->version == 16 && hdrSize == 24)
+    // 4) the definition blob itself, re-packable (baked 24-byte header family)
+    if (d->version >= 16 && hdrSize == 24)
         ExportEffectRawDef(pakAsset, outBase);
 
     return true;
