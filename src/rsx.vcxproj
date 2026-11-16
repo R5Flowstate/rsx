@@ -79,6 +79,7 @@
     <ClInclude Include="game\rtech\assets\material.h" />
     <ClInclude Include="game\rtech\assets\material_snapshot.h" />
     <ClInclude Include="game\rtech\assets\model.h" />
+    <ClInclude Include="game\rtech\assets\model_s30.h" />
     <ClInclude Include="game\rtech\assets\odl_asset.h" />
     <ClInclude Include="game\rtech\assets\odl_pak.h" />
     <ClInclude Include="game\rtech\assets\particle_script.h" />
@@ -200,6 +201,7 @@
     <ClCompile Include="game\rtech\assets\material.cpp" />
     <ClCompile Include="game\rtech\assets\material_snapshot.cpp" />
     <ClCompile Include="game\rtech\assets\model.cpp" />
+    <ClCompile Include="game\rtech\assets\model_s30.cpp" />
     <ClCompile Include="game\rtech\assets\odl_asset.cpp" />
     <ClCompile Include="game\rtech\assets\particle_script.cpp" />
     <ClCompile Include="game\rtech\assets\patch_master.cpp" />

@@ -201,6 +201,8 @@ static const std::map<int, eMDLVersion> s_mdlVersionMap
 	{ 17, eMDLVersion::VERSION_17 },
 	{ 18, eMDLVersion::VERSION_18 },
 	{ 19, eMDLVersion::VERSION_19 },
+	{ 20, eMDLVersion::VERSION_17 }, // S30: rebuilt to v17 at load (model_s30.cpp)
+	{ 21, eMDLVersion::VERSION_17 }, // S31: same body layout as v20
 };
 
 constexpr uint64_t s_MdlTimeStamp_V19_1 = 0x01DC1DF805C28000; // 09/05/2025 00:00:00
@@ -429,6 +431,11 @@ public:
 	ModelParsedData_t parsedData;
 
 	eMDLVersion version; // like asset version, but takes between version revisions into consideration
+
+	// Pak version 20/21 (S30/S31): the original body and its size; data points at its v17 rebuild.
+	const char* s30Body = nullptr;
+	uint32_t s30BodySize = 0;
+	std::vector<char> s30Rebuilt;
 
 	inline const studiohdr_generic_t& StudioHdr() const { return parsedData.studiohdr; }
 	inline const studiohdr_generic_t* const pStudioHdr() const { return &parsedData.studiohdr; }

@@ -111,6 +111,9 @@
     <ClInclude Include="game\rtech\assets\model.h">
       <Filter>game\rtech\assets</Filter>
     </ClInclude>
+    <ClInclude Include="game\rtech\assets\model_s30.h">
+      <Filter>game\rtech\assets</Filter>
+    </ClInclude>
     <ClInclude Include="game\rtech\assets\shader.h">
       <Filter>game\rtech\assets</Filter>
     </ClInclude>
@@ -446,6 +449,9 @@
       <Filter>game\rtech\assets</Filter>
     </ClCompile>
     <ClCompile Include="game\rtech\assets\model.cpp">
+      <Filter>game\rtech\assets</Filter>
+    </ClCompile>
+    <ClCompile Include="game\rtech\assets\model_s30.cpp">
       <Filter>game\rtech\assets</Filter>
     </ClCompile>
     <ClCompile Include="game\rtech\assets\shader.cpp">

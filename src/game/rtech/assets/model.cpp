@@ -1,6 +1,7 @@
 #include <pch.h>
 
 #include <game/rtech/assets/model.h>
+#include <game/rtech/assets/model_s30.h>
 #include <game/rtech/assets/animseq.h>
 #include <game/rtech/assets/texture.h>
 #include <game/rtech/assets/material.h>
@@ -701,10 +702,65 @@ static void ParseModelVertexData_v14(CPakAsset* const asset, ModelAsset* const m
     parsedData->meshVertexData.shrink();
 }
 
+// Pak version 20/21: rebuild the body to v17 and point its group records at the
+// raw vertex buffer ConvertVGStored19S30 produces (groups concatenated in order).
+static bool RebuildS30Model(ModelAsset* const modelAsset, const ModelAssetCPU_v16_t* const cpu)
+{
+    modelAsset->s30Body = reinterpret_cast<const char*>(modelAsset->data);
+    modelAsset->s30BodySize = static_cast<uint32_t>(cpu->dataSizeModel);
+
+    std::vector<std::string> warnings;
+    std::string err;
+    if (!modelAsset->s30Body || cpu->dataSizeModel <= 0 ||
+        !ConvertRMDL19S30To17(modelAsset->s30Body, modelAsset->s30BodySize, modelAsset->s30Rebuilt, warnings, err))
+    {
+        printf("WARNING: model '%s' (pak v20/21) could not be rebuilt: %s; listing without parse.\n",
+            modelAsset->name ? modelAsset->name : "<unnamed>", err.c_str());
+        return false;
+    }
+    for (const std::string& w : warnings)
+        printf("WARNING: model '%s' (pak v20/21) rebuild: %s\n", modelAsset->name ? modelAsset->name : "<unnamed>", w.c_str());
+
+    // The rebuilt group table must be the source table moved: same count, same records.
+    r5::studiohdr_v16_t* const pStudioHdr = reinterpret_cast<r5::studiohdr_v16_t*>(modelAsset->s30Rebuilt.data());
+    uint16_t srcGroupRaw = 0, srcGroupCount = 0;
+    memcpy(&srcGroupRaw, modelAsset->s30Body + 196, 2);
+    memcpy(&srcGroupCount, modelAsset->s30Body + 198, 2);
+    const size_t srcGroups = 196 + (static_cast<size_t>(srcGroupRaw & 0xFFFE) << (4 * (srcGroupRaw & 1)));
+    bool groupsOk = pStudioHdr->groupHeaderCount == srcGroupCount && srcGroups + srcGroupCount * 16ull <= modelAsset->s30BodySize;
+    for (uint16_t i = 0; groupsOk && i < srcGroupCount; i++)
+    {
+        const char* const pGroup = reinterpret_cast<const char*>(pStudioHdr->pLODGroup(i));
+        groupsOk = pGroup >= modelAsset->s30Rebuilt.data() && pGroup + 16 <= modelAsset->s30Rebuilt.data() + modelAsset->s30Rebuilt.size()
+            && memcmp(pGroup, modelAsset->s30Body + srcGroups + i * 16ull, 16) == 0;
+    }
+    if (!groupsOk)
+    {
+        printf("WARNING: model '%s' (pak v20/21) rebuilt with a group table that does not match its source; listing without parse.\n",
+            modelAsset->name ? modelAsset->name : "<unnamed>");
+        return false;
+    }
+
+    int rawOffset = 0;
+    for (uint16_t i = 0; i < pStudioHdr->groupHeaderCount; i++)
+    {
+        r5::studio_hw_groupdata_v16_t* const group = const_cast<r5::studio_hw_groupdata_v16_t*>(pStudioHdr->pLODGroup(i));
+        group->dataOffset = rawOffset;
+        group->dataSizeCompressed = group->dataSizeDecompressed;
+        group->dataCompression = eCompressionType::NONE;
+        rawOffset += group->dataSizeDecompressed;
+    }
+
+    modelAsset->data = modelAsset->s30Rebuilt.data();
+    modelAsset->parsedData = ModelParsedData_t(reinterpret_cast<r5::studiohdr_v17_t*>(modelAsset->data), cpu->dataSizePhys,
+        static_cast<int>(modelAsset->s30Rebuilt.size()));
+    return true;
+}
+
 static void ParseModelVertexData_v16(CPakAsset* const asset, ModelAsset* const modelAsset)
 {
     const std::unique_ptr<char[]> pStreamed = modelAsset->vertexStreamingData.size > 0 ? asset->getStarPakData(modelAsset->vertexStreamingData.offset, modelAsset->vertexStreamingData.size, false) : nullptr; // probably smarter to check the size inside getStarPakData but whatever!
-    char* const pDataBuffer = pStreamed.get() ? pStreamed.get() : modelAsset->staticStreamingData;
+    const char* pDataBuffer = pStreamed.get() ? pStreamed.get() : modelAsset->staticStreamingData;
 
     if (!pDataBuffer)
     {
@@ -714,7 +770,21 @@ static void ParseModelVertexData_v16(CPakAsset* const asset, ModelAsset* const m
 
     // Extent of the buffer above: starpak reads are exact-size, static data
     // uses the baked size from the asset header.
-    const uint64_t vertexBufSize = pStreamed.get() ? modelAsset->vertexStreamingData.size : modelAsset->streamingDataSize;
+    uint64_t vertexBufSize = pStreamed.get() ? modelAsset->vertexStreamingData.size : modelAsset->streamingDataSize;
+
+    // Pak version 20/21 store Oodle-compressed group slices; expand them to the raw v17 buffer.
+    std::vector<char> s30Raw;
+    if (modelAsset->s30Body)
+    {
+        std::string err;
+        if (!ConvertVGStored19S30(modelAsset->s30Body, modelAsset->s30BodySize, pDataBuffer, vertexBufSize, s30Raw, err))
+        {
+            printf("WARNING: model '%s' vertex data could not be expanded: %s\n", modelAsset->name ? modelAsset->name : "<unnamed>", err.c_str());
+            return;
+        }
+        pDataBuffer = s30Raw.data();
+        vertexBufSize = s30Raw.size();
+    }
 
     ModelParsedData_t* const parsedData = modelAsset->GetParsedData();
 
@@ -1110,6 +1180,15 @@ void LoadModelAsset(CAssetContainer* const pak, CAsset* const asset)
         ModelAssetCPU_v16_t* cpu = reinterpret_cast<ModelAssetCPU_v16_t*>(pakAsset->cpu());
         mdlAsset = new ModelAsset(hdr, cpu, streamEntry, ver);
 
+        if (pakAsset->version() >= 20 && !RebuildS30Model(mdlAsset, cpu))
+        {
+            if (hdr->name)
+                pakAsset->SetAssetName(hdr->name, true);
+            delete mdlAsset;
+            mdlAsset = nullptr;
+            break;
+        }
+
         ParseModelBoneData_v16(mdlAsset->GetParsedData());
         ParseModelAttachmentData_v16(mdlAsset->GetParsedData());
         ParseModelHitboxData_v16(mdlAsset->GetParsedData());
@@ -1466,6 +1545,41 @@ static bool ExportRawModelAsset(const ModelAsset* const modelAsset, std::filesys
     //const char* const pDataBuffer = streamedData ? streamedData : modelAsset->staticStreamingData;
 
     const studiohdr_generic_t* const pStudioHdr = modelAsset->pStudioHdr();
+
+    // Pak version 20/21: raw export keeps the original body and stored vertex slices.
+    if (modelAsset->s30Body)
+    {
+        StreamIO s30Out(exportPath.string(), eStreamIOMode::Write);
+        s30Out.write(modelAsset->s30Body, modelAsset->s30BodySize);
+        s30Out.close();
+
+        if (pStudioHdr->phySize > 0 && modelAsset->physics)
+        {
+            exportPath.replace_extension(".phy");
+            StreamIO physOut(exportPath.string(), eStreamIOMode::Write);
+            physOut.write(reinterpret_cast<char*>(modelAsset->physics), pStudioHdr->phySize);
+        }
+
+        exportPath.replace_extension(".rson");
+        StreamIO depOut(exportPath.string(), eStreamIOMode::Write);
+        WriteRSONDependencyArray(*depOut.W(), "rigs", modelAsset->animRigs, modelAsset->numAnimRigs);
+        WriteRSONDependencyArray(*depOut.W(), "seqs", modelAsset->animSeqs, modelAsset->numAnimSeqs);
+        depOut.close();
+
+        if (modelAsset->staticStreamingData && modelAsset->streamingDataSize)
+        {
+            exportPath.replace_extension(".vg_static");
+            StreamIO vgsOut(exportPath.string(), eStreamIOMode::Write);
+            vgsOut.write(modelAsset->staticStreamingData, modelAsset->streamingDataSize);
+        }
+        if (streamedData && modelAsset->vertexStreamingData.size)
+        {
+            exportPath.replace_extension(".vg");
+            StreamIO vgOut(exportPath.string(), eStreamIOMode::Write);
+            vgOut.write(streamedData, modelAsset->vertexStreamingData.size);
+        }
+        return true;
+    }
 
     StreamIO studioOut(exportPath.string(), eStreamIOMode::Write);
     studioOut.write(reinterpret_cast<char*>(modelAsset->data), pStudioHdr->length);
