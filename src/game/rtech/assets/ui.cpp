@@ -260,6 +260,22 @@ static bool ReadStringValue(const void* dataPtr, char* outBuffer, size_t bufferS
 //-----------------------------------------------------------------------------
 // Load / PostLoad
 //-----------------------------------------------------------------------------
+// v43 (S31) adds two zero 8-byte fields: one before the count block (+0x40) and one after it
+// (+0x58), moving the counts to +0x48 and the three pointers to +0x60. Bodies match v42.
+static UIAssetHeader_t UIHeaderFromV43(const char* const p)
+{
+    UIAssetHeader_t hdr;
+    memcpy(&hdr, p, 0x40);
+    memcpy(reinterpret_cast<char*>(&hdr) + 0x40, p + 0x48, 0x10);
+    memcpy(reinterpret_cast<char*>(&hdr) + 0x50, p + 0x60, 0x18);
+    return hdr;
+}
+
+static int UIBodyVersion(CPakAsset* const pakAsset)
+{
+    return pakAsset->version() == 43 ? 42 : pakAsset->version();
+}
+
 void LoadUIAsset(CAssetContainer* const container, CAsset* const asset)
 {
     UNUSED(container);
@@ -277,6 +293,12 @@ void LoadUIAsset(CAssetContainer* const container, CAsset* const asset)
     {
         UIAssetHeader_t* const hdr = reinterpret_cast<UIAssetHeader_t* const>(pakAsset->header());
         uiAsset = new UIAsset(hdr, pakAsset->version());
+        break;
+    }
+    case 43:
+    {
+        UIAssetHeader_t hdr = UIHeaderFromV43(reinterpret_cast<const char*>(pakAsset->header()));
+        uiAsset = new UIAsset(&hdr, 42);
         break;
     }
     default:
@@ -347,7 +369,7 @@ void PostLoadUIAsset(CAssetContainer* const container, CAsset* const asset)
             uint16_t dataOffset = uiAsset->GetArgs()[i].dataOffset;
             char strBuf[1024] = {0};
 
-            if (SEH_ReadArgString(uiAsset->GetDefaultValues(), dataOffset, uiAsset->argDefaultValueSize, pakAsset->version(), strBuf, sizeof(strBuf)))
+            if (SEH_ReadArgString(uiAsset->GetDefaultValues(), dataOffset, uiAsset->argDefaultValueSize, UIBodyVersion(pakAsset), strBuf, sizeof(strBuf)))
                 uiAsset->CacheString(dataOffset, strBuf);
             else
                 uiAsset->CacheString(dataOffset, "");
@@ -422,7 +444,7 @@ void* PreviewUIAsset(CAsset* const asset, const bool firstFrameForAsset)
 
     CPakAsset* pakAsset = static_cast<CPakAsset*>(asset);
 
-    const int version = pakAsset->version();
+    const int version = UIBodyVersion(pakAsset);
     if (version != 29 && version != 30 && version != 39 && version != 40 && version != 42)
     {
         ImGui::Text("This asset version (%d) is not currently supported for preview.", version);
@@ -775,7 +797,7 @@ bool ExportUIAsset(CAsset* const asset, const int setting)
                         {
                             gotString = SafeReadStringPointerDirect(valuePtr, strBuf, sizeof(strBuf));
                             if (!gotString)
-                                gotString = ReadStringValue(valuePtr, strBuf, sizeof(strBuf), pakAsset->version());
+                                gotString = ReadStringValue(valuePtr, strBuf, sizeof(strBuf), UIBodyVersion(pakAsset));
                             if (gotString)
                                 strValue = strBuf;
                         }
@@ -887,7 +909,7 @@ bool ExportUIAsset(CAsset* const asset, const int setting)
                             else
                             {
                                 uint8_t* valuePtr = reinterpret_cast<uint8_t*>(uiAsset->GetDefaultValues()) + dataOffset;
-                                gotString = ReadStringValue(valuePtr, strBuf, sizeof(strBuf), pakAsset->version());
+                                gotString = ReadStringValue(valuePtr, strBuf, sizeof(strBuf), UIBodyVersion(pakAsset));
                                 strValue = strBuf;
                             }
 
@@ -998,6 +1020,12 @@ bool ExportUIAsset(CAsset* const asset, const int setting)
 
         // Raw header
         UIAssetHeader_t* hdr = reinterpret_cast<UIAssetHeader_t*>(pakAsset->header());
+        UIAssetHeader_t hdrV43;
+        if (pakAsset->version() == 43)
+        {
+            hdrV43 = UIHeaderFromV43(reinterpret_cast<const char*>(pakAsset->header()));
+            hdr = &hdrV43;
+        }
         uint32_t headerSize = pakAsset->data()->headerStructSize;
         json << "  \"headerSize\": " << headerSize << ",\n";
         json << "  \"headerHex\": \"";
@@ -1043,7 +1071,7 @@ bool ExportUIAsset(CAsset* const asset, const int setting)
         json << "  \"styleDescriptorsHex\": \"";
         if (hdr->styleDescriptors && hdr->styleDescriptorCount > 0)
         {
-            size_t styleDescSize = GetStyleDescriptorSize(pakAsset->version());
+            size_t styleDescSize = GetStyleDescriptorSize(UIBodyVersion(pakAsset));
             size_t totalStyleSize = hdr->styleDescriptorCount * styleDescSize;
             uint8_t* styleData = reinterpret_cast<uint8_t*>(hdr->styleDescriptors);
             for (size_t i = 0; i < totalStyleSize; i++)
@@ -1058,13 +1086,13 @@ bool ExportUIAsset(CAsset* const asset, const int setting)
 
         if (hdr->renderJobs && hdr->renderJobCount > 0)
         {
-            if (pakAsset->version() == 42)
+            if (UIBodyVersion(pakAsset) == 42)
             {
                 const std::string containerName = pakAsset->GetContainerFileName();
                 if (containerName.find("ui_v421") != std::string::npos)
                     isV421 = true;
             }
-            else if (pakAsset->version() == 40)
+            else if (UIBodyVersion(pakAsset) == 40)
             {
                 const std::string containerName = pakAsset->GetContainerFileName();
                 if (containerName.find("ui_s12") != std::string::npos)
@@ -1075,7 +1103,7 @@ bool ExportUIAsset(CAsset* const asset, const int setting)
             // not say which. A wrong guess undercounts every text widget, the walk then reads
             // types from the middle of widgets, and the exported blob is truncated. Walk both
             // tables and keep the one that parses cleanly and fits before the next section.
-            if (pakAsset->version() == 42 && !isV421)
+            if (UIBodyVersion(pakAsset) == 42 && !isV421)
             {
                 const uint8_t* rj = hdr->renderJobs;
                 const auto walk = [&](const uint32_t* sizes, size_t& total) -> bool
@@ -1116,7 +1144,7 @@ bool ExportUIAsset(CAsset* const asset, const int setting)
             for (int jobIdx = 0; jobIdx < hdr->renderJobCount; jobIdx++)
             {
                 uint16_t widgetType = *reinterpret_cast<uint16_t*>(hdr->renderJobs + offset);
-                offset += GetWidgetSize(widgetType, pakAsset->version(), isV401, isV421);
+                offset += GetWidgetSize(widgetType, UIBodyVersion(pakAsset), isV401, isV421);
             }
             renderJobsSize = offset;
         }
@@ -1124,7 +1152,7 @@ bool ExportUIAsset(CAsset* const asset, const int setting)
         json << "  \"renderJobsSize\": " << renderJobsSize << ",\n";
         if (isV421)
             json << "  \"renderJobsVersion\": \"v42.1\",\n";
-        else if (pakAsset->version() == 42)
+        else if (UIBodyVersion(pakAsset) == 42)
             json << "  \"renderJobsVersion\": \"v42\",\n";
         else if (isV401)
             json << "  \"renderJobsVersion\": \"v40.1\",\n";
