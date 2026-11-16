@@ -124,6 +124,7 @@ static void HandleAssetRegistration(const CCommandLine* const cli)
     extern void InitSettingsAssetType();
     extern void InitSettingsLayoutAssetType();
     extern void InitRSONAssetType();
+    extern void InitCubemapAssetType();
     extern void InitSubtitlesAsset();
     extern void InitLoclAssetType();
 
@@ -191,6 +192,7 @@ static void HandleAssetRegistration(const CCommandLine* const cli)
     InitSettingsAssetType();
     InitSettingsLayoutAssetType();
     InitRSONAssetType();
+    InitCubemapAssetType();
     InitSubtitlesAsset();
     InitLoclAssetType();
 

@@ -192,6 +192,7 @@
     <ClCompile Include="game\rtech\assets\animseq.cpp" />
     <ClCompile Include="game\rtech\assets\animseq_data.cpp" />
     <ClCompile Include="game\rtech\assets\anim_recording.cpp" />
+    <ClCompile Include="game\rtech\assets\cubemap.cpp" />
     <ClCompile Include="game\rtech\assets\datatable.cpp" />
     <ClCompile Include="game\rtech\assets\effect.cpp" />
     <ClCompile Include="game\rtech\assets\impact.cpp" />

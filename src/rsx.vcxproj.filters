@@ -559,6 +559,9 @@
     <ClCompile Include="core\mdl\cast.cpp">
       <Filter>core\mdl</Filter>
     </ClCompile>
+    <ClCompile Include="game\rtech\assets\cubemap.cpp">
+      <Filter>game\rtech\assets</Filter>
+    </ClCompile>
     <ClCompile Include="game\rtech\assets\datatable.cpp">
       <Filter>game\rtech\assets</Filter>
     </ClCompile>

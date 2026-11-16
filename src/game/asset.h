@@ -28,6 +28,7 @@ enum class AssetType_t
 	MSNP = MAKEFOURCC('m', 's', 'n', 'p'),
 	MT4A = MAKEFOURCC('m', 't', '4', 'a'),
 	TXTR = MAKEFOURCC('t', 'x', 't', 'r'),
+	CUBE = MAKEFOURCC('c', 'u', 'b', 'e'),
 	TXAN = MAKEFOURCC('t', 'x', 'a', 'n'),
 	TXLS = MAKEFOURCC('t', 'x', 'l', 's'),
 	TXTX = MAKEFOURCC('t', 'x', 't', 'x'),
@@ -107,6 +108,7 @@ static std::map<AssetType_t, Color4> s_AssetTypeColours =
 	{ AssetType_t::MSNP, Color4(70,  120, 180) },
 	// mt4a
 	{ AssetType_t::TXTR, Color4(0,   106, 255) },
+	{ AssetType_t::CUBE, Color4(60,  90,  220) },
 	{ AssetType_t::TXAN, Color4(100, 175, 200) },
 	{ AssetType_t::TXLS, Color4(75,  140, 240) },
 	// txtx
@@ -179,6 +181,7 @@ static const std::map<AssetType_t, const char*> s_AssetTypePaths =
 	{ AssetType_t::MSNP, "material_snapshot" }, // "material snapshot" 
 	// mt4a "material for aspect"
 	{ AssetType_t::TXTR, "texture" },
+	{ AssetType_t::CUBE, "cubemap" },
 	{ AssetType_t::TXAN, "texture_anim" },
 	{ AssetType_t::TXLS, "texture_list" },
 	{ AssetType_t::TXLS, "texture_extension" },
